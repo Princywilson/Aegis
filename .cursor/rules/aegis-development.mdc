@@ -1,0 +1,41 @@
+---
+description: Project-wide AEGIS development principles (stack, architecture, security, and change discipline)
+alwaysApply: true
+---
+
+# AEGIS Development Principles
+
+AEGIS (Enterprise Knowledge Protection and Delivery Platform) is a multi-tenant SaaS platform for enterprise knowledge governance and delivery.
+
+## Stack
+
+- Frontend: React
+- Backend: Python Django
+- Primary database: PostgreSQL
+
+## Architecture
+
+- Keep the system modular, maintainable, scalable, and secure.
+- Security First is a core principle.
+- Consider multi-tenancy in all relevant backend and database decisions.
+- Maintain clean separation between frontend, backend, business logic, data access, and presentation.
+- Prefer simple, readable, maintainable code over unnecessary complexity.
+- Do not introduce dependencies unless they are justified.
+- Do not make architectural changes without first explaining the reason.
+
+## Change discipline
+
+- Do not modify unrelated files when implementing a feature.
+- Before making significant changes, inspect the existing implementation and understand the surrounding code.
+- Do not delete or rewrite existing functionality unless explicitly requested.
+- Write code suitable for production, not throwaway prototypes.
+- When requirements are ambiguous, ask for clarification instead of inventing business rules.
+
+## Security and configuration
+
+- Never expose secrets, credentials, API keys, tokens, or environment-specific sensitive information in source code.
+- Use environment variables for secrets and configuration that varies by environment.
+
+## Feature completeness
+
+When implementing a feature, consider validation, authorization, error handling, logging, and testing.
