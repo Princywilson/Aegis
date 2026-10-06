@@ -13,3 +13,15 @@ Desktop.ini
 # Secrets
 .env
 .env.*
+!.env.example
+!**/.env.example
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.Python
