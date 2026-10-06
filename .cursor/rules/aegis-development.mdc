@@ -39,3 +39,23 @@ AEGIS (Enterprise Knowledge Protection and Delivery Platform) is a multi-tenant 
 ## Feature completeness
 
 When implementing a feature, consider validation, authorization, error handling, logging, and testing.
+
+## Domain-Neutral Terminology
+
+AEGIS must remain industry-independent and domain-neutral.
+
+- Do not introduce terminology that ties the platform to a specific industry, including but not limited to training, safety, education, healthcare, finance, or any other industry-specific domain.
+
+- Prefer generic business/domain-neutral terminology such as Organization, User, Role, Content, Content Version, Program, Assignment, Workspace, Activity, Audit, Permission, Configuration, and Notification.
+
+- Do not blindly replace terminology with generic words when the actual concept has a more precise neutral name; choose terminology based on the business meaning of the object.
+
+- Business-specific terminology must be introduced only when explicitly required by a confirmed product requirement.
+
+- Do not infer industry-specific terminology from examples, source material, existing legacy terminology, or implementation details.
+
+- This principle applies consistently across the database schema, models, APIs, endpoints, frontend components, variables, functions, classes, file names, documentation, comments, UI labels, and user-facing messages.
+
+- If a requirement appears to require industry-specific terminology, flag it before implementation and ask for clarification.
+
+- Existing AEGIS terminology must be reused consistently instead of creating synonyms for the same concept.
