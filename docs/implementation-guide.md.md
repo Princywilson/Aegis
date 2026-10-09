@@ -528,7 +528,7 @@ Management
 ```
 
 Do not use Django Groups as the AEGIS role model.
-Renaming the role does not create a separate user entity/table or change its permissions. Preserve the former Trainer role's permission associations exactly; do not infer or grant capabilities from the new name. Before implementing M3, document the complete role-to-permission mapping because the current conceptual matrices do not define it permission by permission.
+The former Trainer role had no implemented runtime permission mapping. M3 adopts the newly approved baseline below; it is not a rename-only change.
 
 ---
 
@@ -921,6 +921,22 @@ security-event tenant/platform scope and severity
 
 Implement AEGIS roles and permissions.
 
+## M3 Decision — Authoritative Role and Permission Baseline
+
+The initial role baseline is Administrator, Content Manager, Content Consumer, and Management. This is a newly approved RBAC baseline, not a rename-only change to an implemented Trainer mapping; M2 has no runtime AEGIS roles or permissions.
+
+| Role | Initial capability boundary |
+| --- | --- |
+| Administrator | All defined capabilities within the assigned organization. Platform-wide authority is not implied. |
+| Content Manager | Organization-scoped content, version, program, and assignment management. Access-grant/revoke capabilities are not granted by default and require explicit role authorization. |
+| Content Consumer | Own-profile operations; view/search assigned content, versions, and programs; secure delivery and watermark consumption; own activity; reports and analytics limited to assigned content/programs. No organizational content mutations, assignment/access-grant operations, audit access, or security-event access. |
+| Management | Read-only access to authorized organization content, versions, programs, activity, reports, and analytics. Audit permission is defined but is not assigned until the audit-record scope is specified. No mutations or security-event access by default. |
+
+Every permission is evaluated in the user's organization. The Administrator role grants no platform-wide capability. Resource-level visibility and report/analytics scope must also be enforced by the backend when those resources and operations are implemented; a role permission alone does not authorize cross-tenant or unassigned-resource access. Do not expose an implemented operation without a server-side permission check.
+
+The initial baseline is seeded idempotently. Additional permission grants require an authorized role manager; the baseline seeder must not remove explicit grants. The Management audit boundary remains pending and must be approved before granting `AUDIT_VIEW_ORGANIZATION` to that role.
+Any later change to role capabilities requires an explicit documented decision.
+
 ## Entities
 
 ```text
@@ -943,42 +959,60 @@ Management
 
 ## Permission examples
 
-Use the approved capability-oriented model, such as:
+Use the following approved capability-oriented permissions. The `*_ASSIGNED` permissions require the later resource/report query to enforce assignment scope; they do not represent unrestricted organization reads.
 
 ```text
+PROFILE_VIEW_OWN
+PROFILE_UPDATE_OWN
 USER_VIEW
 USER_CREATE
 USER_UPDATE
 USER_DEACTIVATE
-
 ROLE_MANAGE
-
 CONTENT_VIEW
+CONTENT_SEARCH
 CONTENT_CREATE
 CONTENT_UPDATE
 CONTENT_ARCHIVE
 CONTENT_PUBLISH
-
-VERSION_CREATE
 VERSION_VIEW
+VERSION_CREATE
 VERSION_PUBLISH
-
+PROGRAM_VIEW
 PROGRAM_CREATE
 PROGRAM_UPDATE
-
+ASSIGNMENT_MANAGE
 ACCESS_GRANT
 ACCESS_REVOKE
-
-ACTIVITY_VIEW
-AUDIT_VIEW
-REPORT_VIEW
-ANALYTICS_VIEW
+SECURE_DELIVERY
+WATERMARK_CONSUME
+ACTIVITY_VIEW_OWN
+ACTIVITY_VIEW_ORGANIZATION
+AUDIT_VIEW_ORGANIZATION
+SECURITY_EVENT_VIEW_ORGANIZATION
+REPORT_VIEW_ASSIGNED
+REPORT_VIEW_ORGANIZATION
+ANALYTICS_VIEW_ASSIGNED
+ANALYTICS_VIEW_ORGANIZATION
 CONFIGURATION_MANAGE
 ```
 
-Do not invent a huge permission catalogue.
+### Initial Atomic Permission Assignment
 
-Start with the permissions required by actual MVP workflows.
+All four seeded roles receive `PROFILE_VIEW_OWN` and `PROFILE_UPDATE_OWN`, which apply only to the user's own profile.
+
+| Role | Additional seeded permissions |
+| --- | --- |
+| Administrator | Every permission code in the initial catalogue, evaluated only within the assigned organization. No platform-wide permission exists in this baseline. |
+| Content Manager | `CONTENT_VIEW`, `CONTENT_SEARCH`, `CONTENT_CREATE`, `CONTENT_UPDATE`, `CONTENT_ARCHIVE`, `CONTENT_PUBLISH`, `VERSION_VIEW`, `VERSION_CREATE`, `VERSION_PUBLISH`, `PROGRAM_VIEW`, `PROGRAM_CREATE`, `PROGRAM_UPDATE`, `ASSIGNMENT_MANAGE`. `ACCESS_GRANT` and `ACCESS_REVOKE` are not seeded; an authorized role manager may explicitly grant them. |
+| Content Consumer | `CONTENT_VIEW`, `CONTENT_SEARCH`, `VERSION_VIEW`, `PROGRAM_VIEW`, `SECURE_DELIVERY`, `WATERMARK_CONSUME`, `ACTIVITY_VIEW_OWN`, `REPORT_VIEW_ASSIGNED`, `ANALYTICS_VIEW_ASSIGNED`. Assigned-resource codes require resource-scoped enforcement; own activity must not expose audit records. |
+| Management | `CONTENT_VIEW`, `CONTENT_SEARCH`, `VERSION_VIEW`, `PROGRAM_VIEW`, `ACTIVITY_VIEW_ORGANIZATION`, `REPORT_VIEW_ORGANIZATION`, `ANALYTICS_VIEW_ORGANIZATION`. `AUDIT_VIEW_ORGANIZATION` remains unassigned until audit-record visibility is specified; no security-event permission is seeded. |
+
+The permission catalogue also defines explicit administrative capabilities for user/role management, content and version operations, program/assignment/access management, organization activity/audit/security-event visibility, reports, analytics, and configuration. Management's read-only activity/report capabilities must still enforce organization and resource authorization. Security-event access is separate from audit access.
+
+Initialize an organization with `python manage.py seed_rbac`. Trusted deployment/bootstrap operators can assign a role using `python manage.py assign_user_role <organization_slug> <email> <role_code>`; this command is not a substitute for authenticated role-management APIs when those are implemented.
+
+M4 introduces the minimal `AuditRecord` foundation required for content archival. Role/permission management APIs remain unavailable because this prerequisite does not yet record role assignment/removal or permission grant/revocation. At M10, add the documented `USER_ROLE_CHANGED` and `PERMISSION_CHANGED` audit actions before exposing those APIs.
 
 ## Authorization helper
 
@@ -1012,7 +1046,7 @@ requested action
 
 ## Tests
 
-Test every role against representative permissions.
+Test every role against its seeded permissions and representative denials. For resource operations, also test tenant and assignment scope in the owning milestone.
 
 ---
 
@@ -1098,6 +1132,14 @@ permission denial
 invalid file input
 storage metadata
 ```
+
+## Minimal audit prerequisite (approved 2026-10-09)
+
+Content archival is an M4 operation and must be auditable as part of the same business transaction. M4 therefore introduces the smallest `AuditRecord` foundation needed by that workflow, using the `audit_records` schema defined in the Data Architecture: organization, nullable actor, action, resource type and ID, occurrence time, and optional old/new values and metadata.
+
+Initially, `CONTENT_ARCHIVED` is the only supported audit action. The archive state change and its append-only audit record must commit or roll back together. Do not substitute a Security Event for an AuditRecord, and do not add audit-history query/update/delete APIs in M4.
+
+M10 expands this foundation with the remaining audit actions, investigation/history queries, filtering, and other audit-management capabilities. Role/permission management APIs remain deferred until M10 can audit their changes.
 
 ---
 

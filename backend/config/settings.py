@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "identity",
     "accountability",
+    "knowledge",
 ]
 
 MIDDLEWARE = [

@@ -47,6 +47,54 @@ class SecurityEvent(models.Model):
         return self.event_type
 
 
+class AuditRecord(models.Model):
+    class Action(models.TextChoices):
+        CONTENT_ARCHIVED = "CONTENT_ARCHIVED", "Content archived"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        "identity.Organization",
+        on_delete=models.PROTECT,
+        related_name="audit_records",
+    )
+    actor_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="audit_records",
+        null=True,
+        blank=True,
+    )
+    action = models.CharField(max_length=100, choices=Action.choices)
+    resource_type = models.CharField(max_length=100)
+    resource_id = models.UUIDField()
+    occurred_at = models.DateTimeField(auto_now_add=True)
+    old_values = models.JSONField(null=True, blank=True)
+    new_values = models.JSONField(null=True, blank=True)
+    metadata = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        db_table = "audit_records"
+        indexes = [
+            models.Index(
+                fields=["organization", "occurred_at"],
+                name="audit_org_time_idx",
+            ),
+            models.Index(
+                fields=["organization", "resource_type", "resource_id"],
+                name="audit_org_resource_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(action__in=["CONTENT_ARCHIVED"]),
+                name="audit_action_valid",
+            ),
+        ]
+
+    def __str__(self):
+        return self.action
+
+
 class AuthenticationRateLimitCounter(models.Model):
     class KeyType(models.TextChoices):
         ACCOUNT = "ACCOUNT", "Account"

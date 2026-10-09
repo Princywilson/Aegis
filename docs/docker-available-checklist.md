@@ -1,7 +1,7 @@
 # Docker-Available Checklist
 
 **Last reviewed:** 2026-10-09  
-**Current state:** Docker Desktop and the PostgreSQL 16 Compose service are running. The existing `aegis` database was repaired from a locally stored, restore-tested backup (`aegis-before-migration-repair-20261009.dump`); all current migrations are applied, migration drift is clear, and all 35 PostgreSQL tests pass. Separate worker processes also verified the account/IP rate limits. `backend/.env` is absent; validation used process-local configuration. See [Implementation Status](implementation-status.md) for exact results and the SQLite command.
+**Current state:** Docker Engine 29.8.2 and the PostgreSQL 16 Compose service are available. M3's RBAC migration and M4's Content and minimal AuditRecord migrations are applied to the configured `aegis` database. Django checks and migration-drift checks passed; the combined identity/accountability/knowledge suite passed all 61 tests with no skips. The existing `aegis` database repair and restore-tested backup (`aegis-before-migration-repair-20261009.dump`) remain documented. `backend/.env` is absent; this verification used process-local configuration, and credentials must remain private.
 
 Use this checklist to complete the remaining database and manual verification. Do not treat validation on the isolated database as proof that the existing `aegis` database can be migrated.
 
@@ -105,6 +105,40 @@ The PostgreSQL run discovered 35 tests and passed against the configured `aegis`
 - [x] Verify concurrent account and source-IP failures cannot exceed their thresholds using PostgreSQL transactions on independent database connections and separate worker processes.
 - [ ] Configure deployment scheduling for `cleanup_auth_rate_limits` once a scheduler is selected; do not add a process-local counter backend.
 
+## M3: RBAC (PostgreSQL Verification Passed)
+
+The M3 role boundary was approved and recorded in the Implementation Guide on 2026-10-09. RBAC models, services, commands, `/me` output, and automated tests are implemented. The migration and full relevant suite passed on PostgreSQL. Management audit access remains unassigned pending a more precise audit-record scope. Content Consumer resource-level assignment filtering is still to be implemented with the assignment/access models.
+
+- [x] Approve the initial role capability boundaries for Administrator, Content Manager, Content Consumer, and Management; do not use Django Groups as the AEGIS role model.
+- [x] Define the atomic permission catalogue and seeded role-permission mapping; identity tests exercise the mapping on SQLite.
+- [x] Implement tenant-scoped role assignment and role-permission services, including cross-organization rejection tests on SQLite and PostgreSQL.
+- [ ] Ensure Content Consumer content/version/program reads require assigned/authorized scope; do not grant content mutation, publishing, archiving, version creation, assignment, or access-grant management.
+- [ ] Scope Content Consumer activity to the user's own records and reports/analytics to content/programs assigned to that user; do not grant audit or security-event access.
+- [x] Implement reusable server-side permission checks and a deny-by-default DRF permission class. No content/program operation endpoints exist yet to wire.
+- [x] Re-run the full authorization suite against PostgreSQL, including allow/deny behavior, inactive users, and tenant isolation: 45 tests passed, no skips.
+- [x] Verify role mappings, allow/deny behavior, inactive-user handling, tenant-scoped assignment, and Management audit/security-event denials on SQLite (45 total suite tests; 2 PostgreSQL-only tests skipped). This is development evidence only, not PostgreSQL verification.
+- [x] Apply RBAC migrations on PostgreSQL, run migration-drift checks, and execute the complete relevant PostgreSQL test suite (45 tests passed; no skips; no migration drift).
+- [x] Verify `/api/v1/auth/me/` returns the assigned role and effective permissions without cross-tenant roles on SQLite and PostgreSQL.
+- [x] Keep Management audit access denied until its audit-record scope is explicitly approved; security events remain a separate capability.
+- [x] Keep role/permission management APIs unavailable until M10 AuditRecord support can record assignments and permission changes.
+
+## M4: Content Repository (In Progress)
+
+- [x] Add the organization-owned Content model and apply its migration to PostgreSQL.
+- [x] Add create, list, retrieve, and metadata-update APIs with server-side AEGIS permission checks.
+- [x] Enforce organization filtering; cross-tenant content is not listed or retrievable.
+- [x] Keep Content Consumer-only list/detail results empty until assignment/access records support an authorized-resource filter.
+- [x] Validate pagination, status/search filters, and search permission; reject unsupported `program_id` until M6.
+- [x] Reject unknown fields, including client-supplied tenant IDs and file data, instead of silently accepting them.
+- [x] Add the minimal organization-scoped AuditRecord prerequisite and CONTENT_ARCHIVED event for archive, with actor/resource/timestamp and old/new status values.
+- [x] Verify the archive state change and AuditRecord commit atomically, including rollback on audit persistence failure; repeated archive returns 409 INVALID_STATE.
+- [x] Expose archive only with CONTENT_ARCHIVE and verify cross-organization 404 and permission-denied behavior.
+- [x] Run `identity accountability knowledge` against PostgreSQL: 61 tests passed, no skips; Django check and migration-drift check passed.
+- [ ] Manually verify content create/update/archive through an authenticated session and CSRF-protected requests against the running development API.
+- [ ] Implement the guide's storage abstraction and private-file workflow with Content Versioning; no public file URL or unprotected download endpoint is allowed.
+- [ ] Replace the temporary nullable `current_version_id` UUID reference with the proper Content Version relationship in M5.
+- [ ] Add assignment-backed Content Consumer list/detail filtering when assignment/access models are implemented.
+
 ## If a Check Fails
 
 - Check that Docker Desktop is running and `docker compose ps` reports the `db` service as healthy/running.
@@ -116,4 +150,4 @@ The PostgreSQL run discovered 35 tests and passed against the configured `aegis`
 
 ## Add Future Docker Checks Incrementally
 
-As each later milestone introduces database-backed behavior, append its specific migration, integration-test, and manual-verification steps here. Keep future items unchecked until that feature exists and its PostgreSQL check is run. After M2 is closed, the next checklist addition should cover M3 RBAC roles, permissions, and authorization tests.
+As each later milestone introduces database-backed behavior, append its specific migration, integration-test, and manual-verification steps here. Keep future items unchecked until that feature exists and its PostgreSQL check is run.

@@ -3,6 +3,7 @@ from datetime import timedelta
 from io import StringIO
 from threading import Barrier
 from unittest import skipUnless
+import uuid
 
 from django.core.management import call_command
 from django.db import (
@@ -17,7 +18,7 @@ from django.utils import timezone
 
 from identity.models import Organization, User
 
-from .models import AuthenticationRateLimitCounter, SecurityEvent
+from .models import AuditRecord, AuthenticationRateLimitCounter, SecurityEvent
 from .services import (
     is_login_rate_limited,
     record_login_failure,
@@ -52,6 +53,48 @@ class SecurityEventModelTests(TestCase):
                 SecurityEvent.objects.create(
                     event_type="LOGIN_FAILURE",
                     severity="CRITICAL",
+                )
+
+
+class AuditRecordModelTests(TestCase):
+    def setUp(self):
+        self.organization = Organization.objects.create(
+            name="Example",
+            slug="example",
+        )
+        self.user = User.objects.create_user(
+            email="actor@example.com",
+            password="audit-test-password",
+            organization=self.organization,
+        )
+
+    def test_content_archive_audit_record_captures_scope_and_state(self):
+        record = AuditRecord.objects.create(
+            organization=self.organization,
+            actor_user=self.user,
+            action=AuditRecord.Action.CONTENT_ARCHIVED,
+            resource_type="content",
+            resource_id=uuid.uuid4(),
+            old_values={"status": "DRAFT"},
+            new_values={"status": "ARCHIVED"},
+        )
+
+        self.assertEqual(record.organization_id, self.organization.id)
+        self.assertEqual(record.actor_user_id, self.user.id)
+        self.assertEqual(record.action, "CONTENT_ARCHIVED")
+        self.assertEqual(record.old_values, {"status": "DRAFT"})
+        self.assertEqual(record.new_values, {"status": "ARCHIVED"})
+        self.assertIsNotNone(record.occurred_at)
+
+    def test_undefined_audit_action_is_rejected(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                AuditRecord.objects.create(
+                    organization=self.organization,
+                    actor_user=self.user,
+                    action="UNDEFINED_ACTION",
+                    resource_type="content",
+                    resource_id=uuid.uuid4(),
                 )
 
 

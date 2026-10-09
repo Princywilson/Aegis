@@ -20,6 +20,14 @@ def exception_handler(exc, context):
         code = "FORBIDDEN"
         message = "The request could not be authorized."
         details = {}
+    elif response.status_code == status.HTTP_404_NOT_FOUND:
+        code = "RESOURCE_NOT_FOUND"
+        message = "The requested resource was not found."
+        details = {}
+    elif response.status_code == status.HTTP_409_CONFLICT:
+        code = "INVALID_STATE"
+        message = "The resource's current state does not allow this operation."
+        details = {}
     else:
         code = "REQUEST_ERROR"
         message = "The request could not be completed."

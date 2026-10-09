@@ -515,13 +515,27 @@ Authenticated user.
             "id": "org_001",
             "name": "Example Organization"
         },
-        "roles": [],
-        "permissions": []
+        "roles": [
+            "Content Consumer"
+        ],
+        "permissions": [
+            "ACTIVITY_VIEW_OWN",
+            "ANALYTICS_VIEW_ASSIGNED",
+            "CONTENT_SEARCH",
+            "CONTENT_VIEW",
+            "PROFILE_UPDATE_OWN",
+            "PROFILE_VIEW_OWN",
+            "PROGRAM_VIEW",
+            "REPORT_VIEW_ASSIGNED",
+            "SECURE_DELIVERY",
+            "VERSION_VIEW",
+            "WATERMARK_CONSUME"
+        ]
     }
 }
 ```
 
-The roles and permissions arrays remain empty until the RBAC milestone is implemented.
+The response contains the role names assigned to the authenticated user within their organization and the sorted union of those roles' permission codes. Both arrays are empty when no AEGIS roles are assigned. Django Groups and Django's built-in permission assignments do not contribute to AEGIS permissions.
 
 ## Authentication Event Visibility
 
@@ -703,7 +717,7 @@ Required.
 
 ### Validation
 
-- Name required
+- Title required
 - Valid email
 - Email uniqueness according to user/organization rules
 - Organization context must be valid
@@ -864,12 +878,16 @@ Administrative permission.
 {
     "data": [
         {
-            "code": "content.view",
-            "name": "View Content"
+            "code": "CONTENT_VIEW",
+            "name": "View content"
         },
         {
-            "code": "content.manage",
-            "name": "Manage Content"
+            "code": "CONTENT_CREATE",
+            "name": "Create content"
+        },
+        {
+            "code": "CONTENT_UPDATE",
+            "name": "Update content"
         }
     ]
 }
@@ -895,17 +913,18 @@ Required.
 
 ### Authorization
 
-Depends on the requested operation and user's permissions/access.
+`CONTENT_VIEW` is required for ordinary listing; `CONTENT_SEARCH` is required when the `search` parameter is supplied. Results are always tenant-scoped.
 
 ### Query Parameters
 
 ```
 ?page=1
 &page_size=20
-&status=published
-&search=induction
-&program_id=program_001
+&status=DRAFT
+&search=governance
 ```
+
+`program_id` filtering is available once content assignments are implemented in M6. Until then, requests containing `program_id` receive a validation error. A Content Consumer must only see content within their authorized assignment scope; because assignment/access records do not exist yet, M4 currently returns no content to Content Consumer-only users.
 
 ### Response
 
@@ -914,12 +933,8 @@ Depends on the requested operation and user's permissions/access.
     "data": [
         {
             "id": "content_001",
-            "name": "Safety Induction",
-            "status": "published",
-            "current_version": {
-                "id": "version_003",
-                "version_number": 3
-            }
+            "title": "Knowledge Resource",
+            "status": "DRAFT"
         }
     ],
     "meta": {
@@ -944,18 +959,18 @@ Required.
 
 ### Authorization
 
-`content.create`
+`CONTENT_CREATE`
 
 ### Request
 
 ```json
 {
-    "name": "Safety Induction",
-    "description": "General safety induction training content"
+    "title": "Knowledge Resource",
+    "description": "A reusable organizational resource."
 }
 ```
 
-If content creation includes an initial file/version, the API may use a dedicated upload workflow rather than embedding large file data directly in the JSON request.
+The M4 metadata endpoint rejects file fields. File upload and storage are handled with the Content Version/storage workflow.
 
 ### Validation
 
@@ -970,8 +985,9 @@ If content creation includes an initial file/version, the API may use a dedicate
 {
     "data": {
         "id": "content_001",
-        "name": "Safety Induction",
-        "status": "draft"
+        "title": "Knowledge Resource",
+        "description": "A reusable organizational resource.",
+        "status": "DRAFT"
     }
 }
 ```
@@ -1008,20 +1024,17 @@ Permission
 Content Access
 ```
 
+Organization AEGIS administrators, Content Managers, and Management users are restricted to their own organization. A Content Consumer must additionally satisfy assigned-resource scope; until assignment/access records are implemented, Content Consumer-only users receive no content detail results.
+
 ### Response
 
 ```json
 {
     "data": {
         "id": "content_001",
-        "name": "Safety Induction",
-        "description": "General safety induction training content",
-        "status": "published",
-        "current_version": {
-            "id": "version_003",
-            "version_number": 3,
-            "status": "published"
-        }
+        "title": "Knowledge Resource",
+        "description": "A reusable organizational resource.",
+        "status": "DRAFT"
     }
 }
 ```
@@ -1040,13 +1053,13 @@ Required.
 
 ### Authorization
 
-`content.manage`
+`CONTENT_UPDATE`
 
 ### Request
 
 ```json
 {
-    "name": "Updated Safety Induction",
+    "title": "Updated Knowledge Resource",
     "description": "Updated description"
 }
 ```
@@ -1084,7 +1097,7 @@ Required.
 
 ### Authorization
 
-`content.archive`
+`CONTENT_ARCHIVE`
 
 ### Request
 
@@ -1098,7 +1111,7 @@ Required.
 {
     "data": {
         "id": "content_001",
-        "status": "archived"
+        "status": "ARCHIVED"
     }
 }
 ```
@@ -1113,7 +1126,7 @@ Required.
 409
 ```
 
-The operation must generate an audit record.
+The archive state transition and its `CONTENT_ARCHIVED` AuditRecord must be committed in one database transaction. If the audit record cannot be persisted, the content must remain unchanged. Repeating the operation for already archived content returns `409 INVALID_STATE`. Do not substitute a Security Event for an AuditRecord.
 
 ---
 

@@ -18,6 +18,7 @@ from accountability.services import (
 )
 
 from .models import Organization, User
+from .rbac import effective_permission_codes, effective_role_names
 from .serializers import LoginSerializer
 
 
@@ -174,6 +175,6 @@ class CurrentUserView(APIView):
             )
 
         data = user_summary(request.user)
-        data["roles"] = []
-        data["permissions"] = []
+        data["roles"] = effective_role_names(request.user)
+        data["permissions"] = effective_permission_codes(request.user)
         return Response({"data": data})
