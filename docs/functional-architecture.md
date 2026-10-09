@@ -244,7 +244,7 @@ The complete functional architecture is:
                                     │
                          ┌──────────┴──────────┐
                          ▼                     ▼
-                 Content Versioning      Training Programs
+                 Content Versioning      Programs
                                                │
                                                ▼
                                       Content Assignment
@@ -282,7 +282,7 @@ AEGIS will be divided into the following functional modules.
 | FM-03 | User & Role Management | Manage users, roles and permissions |
 | FM-04 | Knowledge & Content Management | Manage organizational knowledge/content |
 | FM-05 | Content Version Management | Manage content revisions and lifecycle |
-| FM-06 | Training Program Management | Organize content into training contexts |
+| FM-06 | Program Management | Organize content into training contexts |
 | FM-07 | Content Assignment & Access Management | Control who can access what |
 | FM-08 | Secure Content Delivery | Deliver protected content through AEGIS |
 | FM-09 | Content Protection & Watermarking | Apply protection/accountability mechanisms |
@@ -740,7 +740,7 @@ This follows the accepted immutable-version decision.
 
 ---
 
-# 13. FM-06 — Training Program Management
+# 13. FM-06 — Program Management
 
 ## 13.1 Responsibility
 
@@ -761,8 +761,8 @@ Potentially:
 
 ## 13.3 Core Capabilities
 
-- Create training program
-- Update training program
+- Create program
+- Update program
 - Activate/deactivate program
 - View program
 - Associate content
@@ -774,8 +774,8 @@ Potentially:
 ## 13.4 Example
 
 ```
-Training Program
-"Safety Induction"
+Program
+"Reference Program"
        │
        ├── Introduction
        ├── Hazard Identification
@@ -1287,7 +1287,7 @@ Each configurable capability should remain owned by its functional module.
 | Role Management | ✓ | — | — | — |
 | Content Management | ✓ | ✓ | View | View |
 | Version Management | ✓ | ✓ | View | View |
-| Training Program | ✓ | ✓ | View | View |
+| Program | ✓ | ✓ | View | View |
 | Access Management | ✓ | Authorized | — | View |
 | Secure Delivery | ✓* | ✓* | ✓ | ✓* |
 | Watermarking | Configure | — | Consume | — |
@@ -1388,12 +1388,12 @@ remains historical
 
 ---
 
-# 26. WF-05 — Create Training Program
+# 26. WF-05 — Create Program
 
 ```
 Administrator / Content Manager
           ↓
-Create Training Program
+Create Program
           ↓
 Define Program Information
           ↓
@@ -1665,7 +1665,7 @@ A useful rule for implementation is:
 | Roles/Permissions | User & Role Management |
 | Knowledge Resources | Content Management |
 | Revisions | Version Management |
-| Training Context | Training Program |
+| Training Context | Program |
 | User Authorization to Content | Access Management |
 | Protected Presentation | Secure Delivery |
 | Watermark | Content Protection |
@@ -1869,7 +1869,7 @@ The MVP should include:
 ✓ Content Repository
 ✓ Content Upload/Management
 ✓ Content Versioning
-✓ Training Programs
+✓ Programs
 ✓ Content Assignment
 ✓ Controlled Content Consumer Access
 ✓ Secure Browser-Based Delivery
@@ -1969,7 +1969,7 @@ The complete AEGIS functional architecture is:
              ┌──────────────────┴──────────────────┐
              │                                     │
              ▼                                     ▼
-     Content Management                    Training Programs
+     Content Management                    Programs
              │                                     │
              ▼                                     ▼
       Version Management                 Content Assignment
@@ -2064,7 +2064,7 @@ The Phase 2 architecture is directly derived from the previous phase:
 | Permission | Authorization / User & Role Management |
 | Content | Content Management |
 | Content Version | Version Management |
-| Training Program | Training Program Management |
+| Program | Program Management |
 | Content Assignment | Assignment & Access Management |
 | Training Access | Access Management |
 | Content Access | Secure Delivery + Activity |
@@ -2182,7 +2182,7 @@ AEGIS
 ├── 03 User & Role Management
 ├── 04 Knowledge & Content Management
 ├── 05 Content Version Management
-├── 06 Training Program Management
+├── 06 Program Management
 ├── 07 Content Assignment & Access Management
 ├── 08 Secure Content Delivery
 ├── 09 Content Protection & Watermarking

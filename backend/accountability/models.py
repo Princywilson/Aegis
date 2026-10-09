@@ -50,6 +50,14 @@ class SecurityEvent(models.Model):
 class AuditRecord(models.Model):
     class Action(models.TextChoices):
         CONTENT_ARCHIVED = "CONTENT_ARCHIVED", "Content archived"
+        CONTENT_VERSION_PUBLISHED = (
+            "CONTENT_VERSION_PUBLISHED",
+            "Content version published",
+        )
+        CONTENT_VERSION_ARCHIVED = (
+            "CONTENT_VERSION_ARCHIVED",
+            "Content version archived",
+        )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
@@ -86,7 +94,13 @@ class AuditRecord(models.Model):
         ]
         constraints = [
             models.CheckConstraint(
-                condition=Q(action__in=["CONTENT_ARCHIVED"]),
+                condition=Q(
+                    action__in=[
+                        "CONTENT_ARCHIVED",
+                        "CONTENT_VERSION_PUBLISHED",
+                        "CONTENT_VERSION_ARCHIVED",
+                    ]
+                ),
                 name="audit_action_valid",
             ),
         ]

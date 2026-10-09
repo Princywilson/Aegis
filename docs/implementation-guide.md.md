@@ -57,7 +57,7 @@ Content
   ↓
 Content Version
   ↓
-Training Program
+Program
   ↓
 Assignment
   ↓
@@ -117,7 +117,7 @@ The MVP includes:
 - Content Repository
 - Content Upload/Management
 - Content Versioning
-- Training Programs
+- Programs
 - Content Assignment
 - Controlled Content Consumer Access
 - Secure Browser-Based Delivery
@@ -556,7 +556,7 @@ role_permissions
 contents
 content_versions
 
-training_programs
+programs
 content_assignments
 training_access
 
@@ -587,7 +587,7 @@ Content Version
     ↓
 Publish
     ↓
-Training Program
+Program
     ↓
 Content Assignment
     ↓
@@ -631,7 +631,7 @@ M4  Content Repository
  ↓
 M5  Content Versioning
  ↓
-M6  Training Programs + Assignments
+M6  Programs + Assignments
  ↓
 M7  Training Access
  ↓
@@ -1195,6 +1195,25 @@ Publish
 Current published version
 ```
 
+## Approved M5 Upload Policy
+
+The initial upload policy applies per file. The backend must enforce the filename extension, matching MIME type, size limit, and file-content signature before storing a draft version.
+
+| Category | Allowed extensions | MIME type | Maximum size |
+| --- | --- | --- | --- |
+| PDF | `.pdf` | `application/pdf` | 50 MiB |
+| Presentation | `.pptx` | `application/vnd.openxmlformats-officedocument.presentationml.presentation` | 50 MiB |
+| Images | `.jpg`, `.jpeg` | `image/jpeg` | 10 MiB |
+| Images | `.png` | `image/png` | 10 MiB |
+| Images | `.webp` | `image/webp` | 10 MiB |
+| Video | `.mp4` | `video/mp4` | 250 MiB |
+
+Template formats and limits are not yet defined, so template uploads are deferred without removing templates from the broader product scope. External links are not file uploads; their access and delivery behavior is deferred. AEGIS must not fetch or embed external URLs as part of M5. Any change to the approved allowlist or per-file limits requires an explicit documented decision.
+
+## Version Archive Decision
+
+An eligible non-current draft or published version may be archived. Archiving the current version returns `409 Conflict`; the current-version pointer and content state remain unchanged. The operation is organization-scoped and transactional, writes an audit record, and preserves historical metadata and the private file. Re-archiving an archived version returns `409 Conflict`. Archiving the current version in the future requires a separately approved replacement/current-version transition.
+
 ## Tests
 
 ```text
@@ -1203,6 +1222,8 @@ version numbering
 publishing
 immutable published version
 historical version retention
+upload allowlist, MIME/signature validation, and per-file limits
+non-current version archival and current-version conflict
 current version resolution
 cross-content version mismatch
 tenant isolation
@@ -1210,18 +1231,18 @@ tenant isolation
 
 ---
 
-# 17. Milestone 6 — Training Programs + Content Assignment
+# 17. Milestone 6 — Programs + Content Assignment
 
 ## Objective
 
 Create the organizational delivery context.
 
-## Training Program
+## Program
 
 Conceptually:
 
 ```text
-Training Program
+Program
    ├── Content A
    ├── Content B
    └── Content C
@@ -1777,7 +1798,7 @@ Create an end-to-end test scenario.
 7. Create content
 8. Upload Version 1
 9. Publish Version 1
-10. Create Training Program
+10. Create Program
 11. Assign content
 12. Grant Content Consumer access
 13. Login as Content Consumer
@@ -2246,7 +2267,7 @@ Archive
 ## 18–20 October
 
 ```text
-M6 Training Programs
+M6 Programs
 M7 Training Access
 ```
 
@@ -2526,7 +2547,7 @@ content
 Then:
 
 ```text
-training_programs
+programs
         │
         ▼
 content_assignments

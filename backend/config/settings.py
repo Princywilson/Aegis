@@ -13,6 +13,10 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR / ".env")
+AEGIS_PRIVATE_STORAGE_ROOT = os.environ.get(
+    "AEGIS_PRIVATE_STORAGE_ROOT",
+    str(BASE_DIR / "private_storage"),
+)
 
 
 def env(name):

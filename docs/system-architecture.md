@@ -424,7 +424,7 @@ The Django backend acts as the central trust boundary of the application.
 - Business-rule enforcement
 - Content management
 - Version management
-- Training-program management
+- Program management
 - Access management
 - Secure content delivery
 - Activity tracking
@@ -471,7 +471,7 @@ AEGIS Backend
 │
 ├── Content Versioning
 │
-├── Training Programs
+├── Programs
 │
 ├── Assignments
 │
@@ -663,7 +663,7 @@ User information
 Roles / permissions
 Content metadata
 Content version metadata
-Training programs
+Programs
 Assignments
 Access information
 Activity records
@@ -912,7 +912,7 @@ Role / Permission
 Training Access
  │
  ▼
-Training Program
+Program
  │
  ▼
 Content Assignment
@@ -1187,7 +1187,7 @@ React
   ├── User/Role API
   ├── Content API
   ├── Version API
-  ├── Training Program API
+  ├── Program API
   ├── Access API
   ├── Activity API
   └── Audit API

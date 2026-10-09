@@ -22,7 +22,7 @@
     
     - Organization-owned data must belong to exactly one organization.
     - Users operate within an organization context.
-    - Content, training programs, access grants, activity records and audit records must not cross organization boundaries.
+    - Content, programs, access grants, activity records and audit records must not cross organization boundaries.
     - A user belonging to one organization must not be able to access another organization’s resources.
     
     **Principle:** Tenant isolation is a fundamental business rule, not merely a database implementation detail.
@@ -162,14 +162,14 @@
     
     ---
     
-    # Training Program Rules
+    # Program Rules
     
-    ## BR-014 — Training Programs Group Content
+    ## BR-014 — Programs Group Content
     
-    A Training Program provides the business context in which multiple content items can be organized and delivered.
+    A Program provides the business context in which multiple content items can be organized and delivered.
     
     ```
-    Training Program
+    Program
           │
           ├── Content Assignment
           ├── Content Assignment
@@ -180,7 +180,7 @@
     
     ## BR-015 — Content Assignment Does Not Automatically Grant User Access
     
-    Assigning content to a Training Program does not by itself mean that every Content Consumer can access that content.
+    Assigning content to a Program does not by itself mean that every Content Consumer can access that content.
     
     Content availability and user access remain separate concepts.
     
@@ -191,7 +191,7 @@
        ↓
     Content Assignment
        ↓
-    Training Program
+    Program
     
     > **No access grant → No content access.**
     > 
@@ -421,7 +421,7 @@
     Users / Roles / Permissions
     Content
     Content Versions
-    Training Programs
+    Programs
     Content Assignments
     Training Access
     Content Access

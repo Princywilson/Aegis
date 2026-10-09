@@ -28,7 +28,7 @@ The API provides controlled access to:
 - Role and permission management
 - Content management
 - Content versioning
-- Training programs
+- Programs
 - Content assignments
 - Content Consumer access
 - Secure content delivery
@@ -241,7 +241,7 @@ Successful responses should use a consistent JSON structure.
 {
     "data": {
         "id": "content_123",
-        "name": "Safety Induction"
+        "name": "Reference Program"
     }
 }
 ```
@@ -253,7 +253,7 @@ Successful responses should use a consistent JSON structure.
     "data": [
         {
             "id": "content_123",
-            "name": "Safety Induction"
+            "name": "Reference Program"
         },
         {
             "id": "content_124",
@@ -334,7 +334,7 @@ The AEGIS API is organized into the following functional areas:
 /api/v1/roles/
 /api/v1/permissions/
 /api/v1/content/
-/api/v1/training-programs/
+/api/v1/programs/
 /api/v1/assignments/
 /api/v1/access/
 /api/v1/activities/
@@ -1202,16 +1202,28 @@ Required.
 
 ### Request
 
-Conceptually:
+Multipart form upload:
 
-```json
-{
-    "version_notes": "Updated induction material",
-    "file": "<uploaded-file>"
-}
+```text
+Content-Type: multipart/form-data
+file: <uploaded-file>
+version_notes: Updated content
 ```
 
-The actual upload mechanism may use multipart upload or a controlled upload workflow.
+### Approved initial file policy
+
+Limits apply per file, not to total storage or upload count. The extension, declared MIME type, size, and file-content signature must all match the approved policy.
+
+| Category | Allowed extensions | MIME type | Maximum size |
+| --- | --- | --- | --- |
+| PDF | `.pdf` | `application/pdf` | 50 MiB |
+| Presentation | `.pptx` | `application/vnd.openxmlformats-officedocument.presentationml.presentation` | 50 MiB |
+| Images | `.jpg`, `.jpeg` | `image/jpeg` | 10 MiB |
+| Images | `.png` | `image/png` | 10 MiB |
+| Images | `.webp` | `image/webp` | 10 MiB |
+| Video | `.mp4` | `video/mp4` | 250 MiB |
+
+Template uploads and external-link content are deferred pending separate format, size, access, and delivery decisions. External URLs are not file uploads; M5 does not automatically fetch or embed them. Deferral does not remove templates or links from the broader product scope. Changes to the allowlist or limits require an explicit documented decision.
 
 ### Validation
 
@@ -1220,6 +1232,8 @@ The actual upload mechanism may use multipart upload or a controlled upload work
 - New version must follow content lifecycle rules
 - Published historical versions must remain immutable
 - File must satisfy supported-content/security validation
+- Filename extension, declared MIME type, file signature, and per-file size must satisfy the approved initial file policy
+- File bytes and organization ownership must be validated server-side
 
 ### Response
 
@@ -1336,6 +1350,14 @@ Required.
 
 `content.version.archive`
 
+### Rules
+
+- The version must belong to the specified content and the user's organization.
+- An eligible non-current draft or published version may be archived.
+- Archiving the current version returns `409 INVALID_STATE`; it does not clear the current-version pointer or change the Content status.
+- Re-archiving an archived version returns `409 INVALID_STATE`.
+- Archiving preserves the version row and private file. The state transition and `CONTENT_VERSION_ARCHIVED` AuditRecord must commit atomically.
+
 ### Status
 
 ```
@@ -1351,12 +1373,12 @@ Historical records must remain identifiable even after archival.
 
 ---
 
-# 31. Training Program APIs
+# 31. Program APIs
 
-## 31.1 List Training Programs
+## 31.1 List Programs
 
 ```
-GET /api/v1/training-programs
+GET /api/v1/programs
 ```
 
 ### Authentication
@@ -1374,7 +1396,7 @@ Based on organization membership and applicable permissions.
     "data": [
         {
             "id": "program_001",
-            "name": "Safety Induction",
+            "name": "Reference Program",
             "status": "active"
         }
     ]
@@ -1383,10 +1405,10 @@ Based on organization membership and applicable permissions.
 
 ---
 
-# 32. Create Training Program
+# 32. Create Program
 
 ```
-POST /api/v1/training-programs
+POST /api/v1/programs
 ```
 
 ### Authentication
@@ -1401,8 +1423,8 @@ Required.
 
 ```json
 {
-    "name": "Safety Induction",
-    "description": "General safety induction program"
+    "name": "Reference Program",
+    "description": "Organizational reference collection"
 }
 ```
 
@@ -1412,7 +1434,7 @@ Required.
 {
     "data": {
         "id": "program_001",
-        "name": "Safety Induction",
+        "name": "Reference Program",
         "status": "active"
     }
 }
@@ -1430,10 +1452,10 @@ Required.
 
 ---
 
-# 33. Get Training Program
+# 33. Get Program
 
 ```
-GET /api/v1/training-programs/{program_id}
+GET /api/v1/programs/{program_id}
 ```
 
 ### Authentication
@@ -1450,7 +1472,7 @@ Organization membership plus applicable permission/access.
 {
     "data": {
         "id": "program_001",
-        "name": "Safety Induction",
+        "name": "Reference Program",
         "status": "active"
     }
 }
@@ -1458,10 +1480,10 @@ Organization membership plus applicable permission/access.
 
 ---
 
-# 34. Update Training Program
+# 34. Update Program
 
 ```
-PATCH /api/v1/training-programs/{program_id}
+PATCH /api/v1/programs/{program_id}
 ```
 
 ### Authentication
@@ -1476,7 +1498,7 @@ Required.
 
 ```json
 {
-    "name": "Updated Safety Induction"
+    "name": "Updated Reference Program"
 }
 ```
 
@@ -1484,12 +1506,12 @@ Required.
 
 # 35. Content Assignment APIs
 
-Content Assignment represents the relationship between Training Programs and Content.
+Content Assignment represents the relationship between Programs and Content.
 
 ## 35.1 List Program Content
 
 ```
-GET /api/v1/training-programs/{program_id}/content
+GET /api/v1/programs/{program_id}/content
 ```
 
 ### Authentication
@@ -1507,7 +1529,7 @@ Program/content access.
     "data": [
         {
             "content_id": "content_001",
-            "name": "Safety Induction",
+            "name": "Reference Program",
             "status": "published"
         }
     ]
@@ -1519,7 +1541,7 @@ Program/content access.
 # 36. Assign Content to Program
 
 ```
-POST /api/v1/training-programs/{program_id}/content
+POST /api/v1/programs/{program_id}/content
 ```
 
 ### Authentication
@@ -1573,7 +1595,7 @@ Required.
 # 37. Remove Content Assignment
 
 ```
-DELETE /api/v1/training-programs/{program_id}/content/{content_id}
+DELETE /api/v1/programs/{program_id}/content/{content_id}
 ```
 
 ### Authentication
@@ -2194,7 +2216,7 @@ A simplified conceptual authorization matrix is:
 | Manage Content | ✓ | — |
 | Create Version | ✓ | — |
 | Publish Version | ✓ | — |
-| Training Program Management | ✓ | — |
+| Program Management | ✓ | — |
 | Content Assignment | ✓ | — |
 | Grant Access | ✓ | — |
 | Revoke Access | ✓ | — |
@@ -2403,7 +2425,7 @@ Operations that may be retried by clients should be designed to avoid accidental
 For example:
 
 ```
-POST /api/v1/training-programs/{id}/content
+POST /api/v1/programs/{id}/content
 ```
 
 must not create duplicate Content Assignments.
@@ -2446,13 +2468,15 @@ Content-upload APIs must validate uploaded files before accepting them into the 
 
 Validation may include:
 
-- Supported file type
-- File size
-- File integrity
+- The approved extension and matching MIME-type allowlist
+- The approved per-file size limit
+- File-content signature validation; do not trust a client filename or MIME declaration alone
 - Malicious-file detection
 - Organization ownership
 - Upload authorization
 - Version lifecycle
+
+The initial M5 allowlist is PDF (`.pdf`, `application/pdf`, 50 MiB), PPTX (`.pptx`, `application/vnd.openxmlformats-officedocument.presentationml.presentation`, 50 MiB), JPG/JPEG (`image/jpeg`, 10 MiB), PNG (`image/png`, 10 MiB), WEBP (`image/webp`, 10 MiB), and MP4 (`video/mp4`, 250 MiB). Limits are per file. Template uploads and external-link content are deferred. Changes require an explicit documented decision.
 
 The API must not trust a client-provided MIME type or filename as the sole security validation.
 
@@ -2588,10 +2612,10 @@ Response
 
 # 68. Example End-to-End Content Flow
 
-A Content Consumer opens a training program.
+A Content Consumer opens a program.
 
 ```
-GET /api/v1/training-programs/{id}
+GET /api/v1/programs/{id}
 ```
 
 The backend validates:
@@ -2653,7 +2677,7 @@ This provides the central AEGIS flow:
 ```
 Authorized Content Consumer
        ↓
-Training Program
+Program
        ↓
 Content
        ↓
@@ -2715,8 +2739,8 @@ The API should expose business capabilities rather than internal infrastructure.
 | Permission | `/permissions` |
 | Content | `/content` |
 | Content Version | `/content/{id}/versions` |
-| Training Program | `/training-programs` |
-| Content Assignment | `/training-programs/{id}/content` |
+| Program | `/programs` |
+| Content Assignment | `/programs/{id}/content` |
 | Training Access | `/access` |
 | Content Access | `/content/{id}/access` |
 | Activity | `/activities` |
@@ -2756,13 +2780,13 @@ This preserves the domain distinctions established earlier.
 | 20 | GET | `/content/{id}/versions/{version_id}` | Get version |
 | 21 | POST | `/content/{id}/versions/{version_id}/publish` | Publish version |
 | 22 | POST | `/content/{id}/versions/{version_id}/archive` | Archive version |
-| 23 | GET | `/training-programs` | List programs |
-| 24 | POST | `/training-programs` | Create program |
-| 25 | GET | `/training-programs/{id}` | Get program |
-| 26 | PATCH | `/training-programs/{id}` | Update program |
-| 27 | GET | `/training-programs/{id}/content` | List assigned content |
-| 28 | POST | `/training-programs/{id}/content` | Assign content |
-| 29 | DELETE | `/training-programs/{id}/content/{content_id}` | Remove assignment |
+| 23 | GET | `/programs` | List programs |
+| 24 | POST | `/programs` | Create program |
+| 25 | GET | `/programs/{id}` | Get program |
+| 26 | PATCH | `/programs/{id}` | Update program |
+| 27 | GET | `/programs/{id}/content` | List assigned content |
+| 28 | POST | `/programs/{id}/content` | Assign content |
+| 29 | DELETE | `/programs/{id}/content/{content_id}` | Remove assignment |
 | 30 | POST | `/access` | Grant access |
 | 31 | POST | `/access/{id}/revoke` | Revoke access |
 | 32 | POST | `/content/{id}/access` | Start content access |
@@ -2905,7 +2929,7 @@ Phase 5 can be considered complete when:
 - [x]  Core resource endpoints are identified
 - [x]  Content APIs are defined
 - [x]  Content version APIs are defined
-- [x]  Training program APIs are defined
+- [x]  Program APIs are defined
 - [x]  Content assignment APIs are defined
 - [x]  Training access APIs are defined
 - [x]  Secure content delivery APIs are defined
@@ -3002,7 +3026,7 @@ Content Management
         ↓
 Content Versioning
         ↓
-Training Programs
+Programs
         ↓
 Trainer Access
         ↓

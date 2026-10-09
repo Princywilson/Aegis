@@ -48,6 +48,7 @@ class Permission(models.Model):
         VERSION_VIEW = "VERSION_VIEW", "View content versions"
         VERSION_CREATE = "VERSION_CREATE", "Create content versions"
         VERSION_PUBLISH = "VERSION_PUBLISH", "Publish content versions"
+        VERSION_ARCHIVE = "VERSION_ARCHIVE", "Archive content versions"
         PROGRAM_VIEW = "PROGRAM_VIEW", "View programs"
         PROGRAM_CREATE = "PROGRAM_CREATE", "Create programs"
         PROGRAM_UPDATE = "PROGRAM_UPDATE", "Update programs"

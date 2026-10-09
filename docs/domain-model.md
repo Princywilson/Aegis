@@ -34,7 +34,7 @@ Organization
     ├── Content
     │     └── Content Versions
     │
-    ├── Training Programs
+    ├── Programs
     │     └── Content Assignments
     │
     ├── Training / Delivery Context
@@ -58,7 +58,7 @@ Organization
       │
       ├──────── Content ─────── Content Versions
       │
-      └──────── Training Programs
+      └──────── Programs
                     │
                     └──── Content
                               │
@@ -84,7 +84,7 @@ The organization is the **top-level business boundary** of AEGIS.
 An Organization:
 
 - Owns training content
-- Owns training programs
+- Owns programs
 - Manages its users
 - Defines access and authorization within its organization
 - Controls how its proprietary content is delivered
@@ -97,7 +97,7 @@ Organization
     ├── has many Users
     ├── has many Roles
     ├── owns many Content items
-    ├── owns many Training Programs
+    ├── owns many Programs
     ├── has many Activity Records
     └── has many Audit Records
 ```
@@ -114,17 +114,17 @@ AEGIS
  ├── Organization A
  │     ├── Users
  │     ├── Content
- │     └── Training Programs
+ │     └── Programs
  │
  ├── Organization B
  │     ├── Users
  │     ├── Content
- │     └── Training Programs
+ │     └── Programs
  │
  └── Organization C
        ├── Users
        ├── Content
-       └── Training Programs
+       └── Programs
 ```
 
 Organizations should therefore be treated as isolated business domains even if the eventual MVP uses a shared database infrastructure.
@@ -196,7 +196,7 @@ Responsible for organization-level management, including areas such as:
 - Managing content
 - Managing content versions
 - Managing users
-- Managing training programs
+- Managing programs
 - Controlling access
 - Reviewing activity
 - Reviewing audit information
@@ -232,7 +232,7 @@ Examples include:
 - Manage content
 - Publish content
 - View content
-- Access training programs
+- Access programs
 - View activity
 - View audit information
 
@@ -277,7 +277,7 @@ Content represents:
 - Content lifecycle
 - Current version
 - Access eligibility
-- Relationship with training programs
+- Relationship with programs
 
 ### Relationship
 
@@ -348,19 +348,19 @@ Content version history is explicitly part of the project's objective and propos
 
 ---
 
-# 9. Training Program
+# 9. Program
 
 ## Purpose
 
 Represents a structured training offering managed within an organization.
 
-A Training Program provides the business context in which training content is used.
+A Program provides the business context in which training content is used.
 
 For example:
 
 ```
-Training Program
-"Safety Induction"
+Program
+"Reference Program"
         │
         ├── Content A
         ├── Content B
@@ -369,7 +369,7 @@ Training Program
 
 ### Responsibilities
 
-A Training Program:
+A Program:
 
 - Groups related training content
 - Provides context for training delivery
@@ -381,7 +381,7 @@ A Training Program:
 ```
 Organization
       │
-      └── owns Training Programs
+      └── owns Programs
                  │
                  └── uses Content
 ```
@@ -392,7 +392,7 @@ Organization
 
 ## Purpose
 
-Represents the business relationship that determines which content is associated with a particular Training Program or authorized training context.
+Represents the business relationship that determines which content is associated with a particular Program or authorized training context.
 
 This is important because:
 
@@ -402,7 +402,7 @@ This is important because:
 Conceptually:
 
 ```
-Training Program
+Program
        │
        └── Content Assignment
                  │
@@ -436,7 +436,7 @@ User
  │
  └── authorized access
           │
-          └── Training Program
+          └── Program
                     │
                     └── Content
 ```
@@ -654,7 +654,7 @@ The major domain relationships can now be represented as:
                  ┌────────────────┼─────────────────┐
                  │                │                 │
                  ▼                ▼                 ▼
-              Users             Content       Training Programs
+              Users             Content       Programs
                  │                │                 │
                  │                ▼                 │
                  │        Content Versions          │
@@ -692,7 +692,7 @@ Organization
       │       │
       │       └── creates Content Versions
       │
-      └── creates Training Programs
+      └── creates Programs
               │
               └── associates Content
                         │
@@ -733,7 +733,7 @@ User
 Role
 Content
 Content Version
-Training Program
+Program
 Content Assignment
 Training Access
 Activity Record
@@ -771,7 +771,7 @@ Organization
       ├── Content
       │     └── Content Versions
       │
-      ├── Training Programs
+      ├── Programs
       │     └── Content Assignments
       │
       └── Activity / Audit
@@ -891,10 +891,10 @@ Content Consumer
 
 This means `Content Consumer` is a role assigned to a `User`, not a separate fundamental identity or entity.
 
-### Training Program ≠ Content
+### Program ≠ Content
 
 ```
-Training Program
+Program
 = business/training context
 
 Content
@@ -919,7 +919,7 @@ The resulting AEGIS domain can be summarized as:
               ┌─────────────────┼──────────────────┐
               │                 │                  │
               ▼                 ▼                  ▼
-           Users             Content          Training Programs
+           Users             Content          Programs
               │                 │                  │
               ▼                 ▼                  │
         Roles / Access    Content Versions         │
@@ -954,7 +954,7 @@ The resulting AEGIS domain can be summarized as:
 
 The AEGIS domain is therefore centered around one fundamental business relationship:
 
-> **An organization owns protected training content and training programs, authorized users access that content according to their roles and permissions, and AEGIS records the resulting activity and audit trail.**
+> **An organization owns protected training content and programs, authorized users access that content according to their roles and permissions, and AEGIS records the resulting activity and audit trail.**
 > 
 
 The most important domain chain is:
@@ -964,7 +964,7 @@ Organization
       ↓
 User / Role
       ↓
-Training Program
+Program
       ↓
 Content
       ↓

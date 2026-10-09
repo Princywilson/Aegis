@@ -1,7 +1,7 @@
 # Docker-Available Checklist
 
 **Last reviewed:** 2026-10-09  
-**Current state:** Docker Engine 29.8.2 and the PostgreSQL 16 Compose service are available. M3's RBAC migration and M4's Content and minimal AuditRecord migrations are applied to the configured `aegis` database. Django checks and migration-drift checks passed; the combined identity/accountability/knowledge suite passed all 61 tests with no skips. The existing `aegis` database repair and restore-tested backup (`aegis-before-migration-repair-20261009.dump`) remain documented. `backend/.env` is absent; this verification used process-local configuration, and credentials must remain private.
+**Current state:** Docker Engine 29.8.2 and the PostgreSQL 16 Compose service are available. M3's RBAC, M4's Content/AuditRecord, and M5's Content Version, upload-policy, archive-audit, and permission migrations are applied to the configured `aegis` database. Django checks and migration-drift checks passed; the combined identity/accountability/knowledge/upload-policy suite passed all 93 tests with no skips. The existing `aegis` database repair and restore-tested backup (`aegis-before-migration-repair-20261009.dump`) remain documented. `backend/.env` is absent; this verification used process-local configuration, and credentials must remain private.
 
 Use this checklist to complete the remaining database and manual verification. Do not treat validation on the isolated database as proof that the existing `aegis` database can be migrated.
 
@@ -134,10 +134,27 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 - [x] Verify the archive state change and AuditRecord commit atomically, including rollback on audit persistence failure; repeated archive returns 409 INVALID_STATE.
 - [x] Expose archive only with CONTENT_ARCHIVE and verify cross-organization 404 and permission-denied behavior.
 - [x] Run `identity accountability knowledge` against PostgreSQL: 61 tests passed, no skips; Django check and migration-drift check passed.
-- [ ] Manually verify content create/update/archive through an authenticated session and CSRF-protected requests against the running development API.
-- [ ] Implement the guide's storage abstraction and private-file workflow with Content Versioning; no public file URL or unprotected download endpoint is allowed.
-- [ ] Replace the temporary nullable `current_version_id` UUID reference with the proper Content Version relationship in M5.
+- [x] Verify authenticated API session/CSRF behavior for content create/update/archive in PostgreSQL integration tests.
+- [ ] Perform a human browser smoke test for content create/update/archive when a frontend/browser deployment is available.
+- [x] Implement an injectable private storage abstraction with tenant/content/version UUID keys, streamed size/checksum metadata, protected open/delete methods, duplicate-write protection, and no public URL. The configured local private root is not exposed by static/media routes.
+- [x] Integrate private file upload and stored metadata with Content Version in M5; no public file URL or unprotected download endpoint is allowed.
+- [x] Replace the temporary nullable `current_version_id` UUID reference with the proper Content Version relationship in M5.
 - [ ] Add assignment-backed Content Consumer list/detail filtering when assignment/access models are implemented.
+
+## M5: Content Versioning (Implementation Complete; Operational Checks Pending)
+
+- [x] Add ContentVersion with tenant/content ownership, version numbering, lifecycle state, creator, and private storage metadata fields.
+- [x] Apply the Content Version migration to PostgreSQL and preserve the existing current-version database column while replacing its UUID field with a foreign key.
+- [x] Add tenant- and permission-checked version list/detail and publish APIs; publish the selected draft atomically, archive the prior current version, and record `CONTENT_VERSION_PUBLISHED`.
+- [x] Add the documented Content Version archive endpoint; reject current/already archived versions with 409, audit atomically, and preserve historical metadata/files.
+- [x] Apply the version notes, archive-audit, and `VERSION_ARCHIVE` permission migrations to PostgreSQL; grant archive permission to existing Administrator and Content Manager roles.
+- [x] Enforce the approved per-file allowlist: PDF 50 MiB, PPTX 50 MiB, JPG/JPEG/PNG/WEBP 10 MiB, and MP4 250 MiB. Verify declared MIME and content signature; templates and external links are deferred.
+- [x] Integrate multipart upload with private storage, streamed size/checksum calculation, generated tenant/content/version keys, and cleanup if the version row cannot be saved.
+- [x] Test version identity/numbering, authorization, tenant isolation, file validation/limits, private metadata, upload rollback cleanup, publication, archival, audit rollback, and lifecycle transitions.
+- [x] Run `identity accountability knowledge knowledge.tests_uploads` against PostgreSQL: 93 tests passed, no skips; Django check, migration-drift check, and `git diff --check` passed.
+- [ ] Verify production ingress/body-size and request timeout settings support the 250 MiB per-file policy.
+- [x] Verify authenticated API session/CSRF behavior for content create/update/archive and version upload in PostgreSQL integration tests.
+- [ ] Perform a human browser smoke test for content/version APIs when a frontend/browser deployment is available.
 
 ## If a Check Fails
 

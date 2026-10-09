@@ -129,7 +129,7 @@
     ├── User
     ├── Content
     ├── ContentVersion
-    ├── TrainingProgram
+    ├── Program
     ├── Access
     ├── Activity
     └── Audit

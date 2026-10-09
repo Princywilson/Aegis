@@ -48,6 +48,7 @@ SYSTEM_ROLE_PERMISSIONS = {
         "VERSION_VIEW",
         "VERSION_CREATE",
         "VERSION_PUBLISH",
+        "VERSION_ARCHIVE",
         "PROGRAM_VIEW",
         "PROGRAM_CREATE",
         "PROGRAM_UPDATE",

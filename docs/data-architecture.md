@@ -118,7 +118,7 @@ PostgreSQL is responsible for:
 - Roles and permissions
 - Content metadata
 - Content versions
-- Training programs
+- Programs
 - Assignments
 - Access grants
 - Activity
@@ -172,7 +172,7 @@ The conceptual database relationship is:
              ┌────────────────────────┼────────────────────────┐
              │                        │                        │
              ▼                        ▼                        ▼
-          Users                    Content              Training Programs
+          Users                    Content              Programs
              │                        │                        │
              │                        ▼                        │
              │                Content Versions                │
@@ -214,7 +214,7 @@ The initial AEGIS database consists of the following principal entities.
 | Role Permission | `role_permissions` | Depends |
 | Content | `contents` | Yes |
 | Content Version | `content_versions` | Yes |
-| Training Program | `training_programs` | Yes |
+| Program | `programs` | Yes |
 | Content Assignment | `content_assignments` | Yes |
 | Training Access | `training_access` | Yes |
 | Content Access | `content_access` | Yes |
@@ -625,12 +625,12 @@ This prevents a content record from pointing to another organization's version.
 
 ---
 
-# 16. Training Program
+# 16. Program
 
 ## Table
 
 ```
-training_programs
+programs
 ```
 
 ## Purpose
@@ -668,10 +668,10 @@ content_assignments
 
 ## Purpose
 
-Represents the relationship between a Training Program and Content.
+Represents the relationship between a Program and Content.
 
 ```
-Training Program
+Program
        │
        ▼
 Content Assignment
@@ -686,7 +686,7 @@ Content
 | --- | --- | --- |
 | `id` | UUID | Yes |
 | `organization_id` | UUID | Yes |
-| `training_program_id` | UUID | Yes |
+| `program_id` | UUID | Yes |
 | `content_id` | UUID | Yes |
 | `display_order` | INTEGER | No |
 | `is_required` | BOOLEAN | Yes |
@@ -698,7 +698,7 @@ Content
 ```
 UNIQUE(
     organization_id,
-    training_program_id,
+    program_id,
     content_id
 )
 ```
@@ -717,7 +717,7 @@ training_access
 
 ## Purpose
 
-Represents authorization granted to a user for a training program/context.
+Represents authorization granted to a user for a program/context.
 
 This is **not an access event**.
 
@@ -733,7 +733,7 @@ It answers:
 | `id` | UUID | Yes |
 | `organization_id` | UUID | Yes |
 | `user_id` | UUID | Yes |
-| `training_program_id` | UUID | Yes |
+| `program_id` | UUID | Yes |
 | `status` | VARCHAR | Yes |
 | `granted_at` | TIMESTAMP | Yes |
 | `granted_by` | UUID | Yes |
@@ -747,7 +747,7 @@ It answers:
 UNIQUE(
     organization_id,
     user_id,
-    training_program_id
+    program_id
 )
 ```
 
@@ -792,7 +792,7 @@ Content Access
 | `user_id` | UUID | Yes |
 | `content_id` | UUID | Yes |
 | `content_version_id` | UUID | Yes |
-| `training_program_id` | UUID | No |
+| `program_id` | UUID | No |
 | `accessed_at` | TIMESTAMP | Yes |
 | `session_id` | UUID / reference | No |
 | `access_result` | VARCHAR | Yes |
@@ -855,7 +855,7 @@ CONTENT_ACCESS_ATTEMPTED
 | `occurred_at` | TIMESTAMP | Yes |
 | `content_id` | UUID | No |
 | `content_version_id` | UUID | No |
-| `training_program_id` | UUID | No |
+| `program_id` | UUID | No |
 | `session_id` | UUID | No |
 | `metadata` | JSONB | No |
 
@@ -1081,7 +1081,7 @@ Organization
 │    │
 │    └── Content Versions
 │
-├── Training Programs
+├── Programs
 │    │
 │    └── Content Assignments
 │              │
@@ -1090,14 +1090,14 @@ Organization
 ├── Training Access
 │    │
 │    ├── User
-│    └── Training Program
+│    └── Program
 │
 ├── Content Access
 │    │
 │    ├── User
 │    ├── Content
 │    ├── Content Version
-│    └── Training Program
+│    └── Program
 │
 ├── Activity Events
 │
@@ -1116,7 +1116,7 @@ Organization
 Organization 1 ──── N Users
 Organization 1 ──── N Roles
 Organization 1 ──── N Contents
-Organization 1 ──── N Training Programs
+Organization 1 ──── N Programs
 Organization 1 ──── N Training Access Records
 Organization 1 ──── N Activity Events
 Organization 1 ──── N Security Events
@@ -1131,19 +1131,19 @@ Content 1 ──── N Content Assignments
 Content 1 ──── N Content Access Records
 ```
 
-## Training Program
+## Program
 
 ```
-Training Program 1 ──── N Content Assignments
-Training Program 1 ──── N Training Access Records
-Training Program 1 ──── N Content Access Records
+Program 1 ──── N Content Assignments
+Program 1 ──── N Training Access Records
+Program 1 ──── N Content Access Records
 ```
 
 ## User
 
 ```
 User N ──── N Roles
-User N ──── N Training Programs
+User N ──── N Programs
 User 1 ──── N Content Access
 User 1 ──── N Activity Events
 User 1 ──── N Security Events
@@ -1180,7 +1180,7 @@ Implemented through:
 role_permissions
 ```
 
-## Training Program ↔ Content
+## Program ↔ Content
 
 Implemented through:
 
@@ -1188,7 +1188,7 @@ Implemented through:
 content_assignments
 ```
 
-## User ↔ Training Program
+## User ↔ Program
 
 Implemented through:
 
@@ -1223,7 +1223,7 @@ PostgreSQL
 ├── content_versions
 │      └── organization_id
 │
-├── training_programs
+├── programs
 │      └── organization_id
 │
 ├── training_access
@@ -1425,14 +1425,14 @@ UNIQUE(
 
 UNIQUE(
     organization_id,
-    training_program_id,
+    program_id,
     content_id
 )
 
 UNIQUE(
     organization_id,
     user_id,
-    training_program_id
+    program_id
 )
 ```
 
@@ -1456,11 +1456,11 @@ contents.organization_id
 content_versions.content_id
         → contents.id
 
-training_programs.organization_id
+programs.organization_id
         → organizations.id
 
-content_assignments.training_program_id
-        → training_programs.id
+content_assignments.program_id
+        → programs.id
 
 content_assignments.content_id
         → contents.id
@@ -1468,8 +1468,8 @@ content_assignments.content_id
 training_access.user_id
         → users.id
 
-training_access.training_program_id
-        → training_programs.id
+training_access.program_id
+        → programs.id
 ```
 
 Foreign-key relationships must not permit cross-organization relationships.
@@ -1795,7 +1795,7 @@ INDEX(
 )
 ```
 
-## Training Programs
+## Programs
 
 ```
 INDEX(organization_id)
@@ -1816,7 +1816,7 @@ INDEX(
 
 INDEX(
     organization_id,
-    training_program_id
+    program_id
 )
 
 INDEX(
@@ -1941,7 +1941,7 @@ organization.id
 user.id
 content.id
 content_version.id
-training_program.id
+program.id
 activity_event.id
 audit_record.id
 ```
@@ -1979,7 +1979,7 @@ organization_id
 user_id
 content_id
 content_version_id
-training_program_id
+program_id
 ```
 
 They should not be hidden inside JSON.
@@ -2020,7 +2020,7 @@ storage_key NOT NULL
 checksum NOT NULL
 ```
 
-### Training Program
+### Program
 
 ```
 organization_id NOT NULL
@@ -2031,7 +2031,7 @@ name NOT NULL
 
 ```
 user_id NOT NULL
-training_program_id NOT NULL
+program_id NOT NULL
 ```
 
 ### Activity
@@ -2118,7 +2118,7 @@ role_permissions
 contents
 content_versions
 
-training_programs
+programs
 content_assignments
 training_access
 
@@ -2140,7 +2140,7 @@ Django-managed authentication/session tables complement these application tables
                  ┌─────────────────┼──────────────────┐
                  │                 │                  │
                  ▼                 ▼                  ▼
-               USERS             CONTENT       TRAINING_PROGRAMS
+               USERS             CONTENT            PROGRAMS
                  │                 │                  │
                  ▼                 ▼                  │
              USER_ROLES     CONTENT_VERSIONS          │
@@ -2195,7 +2195,7 @@ Content Version Created
 Version Published
         │
         ▼
-Training Program Created
+Program Created
         │
         ▼
 Content Assigned to Program
@@ -2478,7 +2478,7 @@ The complete Phase 3 architecture can be summarized as:
           ┌────────────────┼────────────────┐
           │                │                │
           ▼                ▼                ▼
-        USERS           CONTENT        TRAINING PROGRAMS
+        USERS           CONTENT           PROGRAMS
           │                │                │
           ▼                ▼                ▼
        ROLES          VERSIONS       CONTENT ASSIGNMENTS
@@ -2652,7 +2652,7 @@ Content
       ↓
 Content Versions
       ↓
-Training Programs
+Programs
       ↓
 Content Assignments
       ↓

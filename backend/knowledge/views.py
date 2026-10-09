@@ -2,6 +2,7 @@ from django.db.models import Q
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -9,9 +10,18 @@ from identity.models import Permission
 from identity.permissions import HasAegisPermission
 
 from .authentication import ApiSessionAuthentication
-from .models import Content
-from .serializers import ContentSerializer
-from .services import archive_content
+from .models import Content, ContentVersion
+from .serializers import (
+    ContentSerializer,
+    ContentVersionCreateSerializer,
+    ContentVersionSerializer,
+)
+from .services import (
+    archive_content,
+    archive_content_version,
+    create_content_version,
+    publish_content_version,
+)
 
 
 def content_queryset_for(user):
@@ -164,4 +174,125 @@ class ContentArchiveView(APIView):
                 }
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class ContentVersionListView(generics.ListAPIView):
+    serializer_class = ContentVersionSerializer
+    permission_classes = [HasAegisPermission]
+    authentication_classes = [ApiSessionAuthentication]
+    parser_classes = [MultiPartParser, FormParser]
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_required_aegis_permission(self, request):
+        if request.method == "POST":
+            return Permission.Code.VERSION_CREATE
+        return Permission.Code.VERSION_VIEW
+
+    def get_queryset(self):
+        if not content_queryset_for(self.request.user).filter(
+            pk=self.kwargs["content_id"]
+        ).exists():
+            raise NotFound()
+        return ContentVersion.objects.filter(
+            organization_id=self.request.user.organization_id,
+            content_id=self.kwargs["content_id"],
+        )
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        response.data = {"data": response.data}
+        return response
+
+    def post(self, request, content_id):
+        serializer = ContentVersionCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            version = create_content_version(
+                content_id=content_id,
+                organization_id=request.user.organization_id,
+                actor=request.user,
+                uploaded_file=serializer.validated_data["file"],
+                version_notes=serializer.validated_data.get("version_notes", ""),
+            )
+        except Content.DoesNotExist as exc:
+            raise NotFound() from exc
+        return Response(
+            {"data": ContentVersionSerializer(version).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ContentVersionDetailView(generics.RetrieveAPIView):
+    serializer_class = ContentVersionSerializer
+    permission_classes = [HasAegisPermission]
+    authentication_classes = [ApiSessionAuthentication]
+    http_method_names = ["get", "head", "options"]
+
+    def get_required_aegis_permission(self, request):
+        return Permission.Code.VERSION_VIEW
+
+    def get_queryset(self):
+        if not content_queryset_for(self.request.user).filter(
+            pk=self.kwargs["content_id"]
+        ).exists():
+            raise NotFound()
+        return ContentVersion.objects.filter(
+            organization_id=self.request.user.organization_id,
+            content_id=self.kwargs["content_id"],
+        )
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        response.data = {"data": response.data}
+        return response
+
+
+class ContentVersionPublishView(APIView):
+    permission_classes = [HasAegisPermission]
+    authentication_classes = [ApiSessionAuthentication]
+    required_aegis_permission = Permission.Code.VERSION_PUBLISH
+
+    def post(self, request, content_id, version_id):
+        try:
+            _, version = publish_content_version(
+                content_id=content_id,
+                version_id=version_id,
+                organization_id=request.user.organization_id,
+                actor=request.user,
+            )
+        except (Content.DoesNotExist, ContentVersion.DoesNotExist) as exc:
+            raise NotFound() from exc
+        return Response(
+            {
+                "data": {
+                    "id": str(version.id),
+                    "status": version.status,
+                }
+            }
+        )
+
+
+class ContentVersionArchiveView(APIView):
+    permission_classes = [HasAegisPermission]
+    authentication_classes = [ApiSessionAuthentication]
+    required_aegis_permission = Permission.Code.VERSION_ARCHIVE
+
+    def post(self, request, content_id, version_id):
+        try:
+            version = archive_content_version(
+                content_id=content_id,
+                version_id=version_id,
+                organization_id=request.user.organization_id,
+                actor=request.user,
+            )
+        except (Content.DoesNotExist, ContentVersion.DoesNotExist) as exc:
+            raise NotFound() from exc
+        return Response(
+            {
+                "data": {
+                    "id": str(version.id),
+                    "status": version.status,
+                }
+            }
         )
