@@ -116,7 +116,7 @@ Organization
 Presentation File
      │
      ▼
-Trainer
+Content Consumer
      │
      ▼
 Uncontrolled Copying
@@ -132,7 +132,7 @@ Protected Content
 AEGIS Secure Delivery
      │
      ▼
-Authorized Trainer
+Authorized Content Consumer
      │
      ▼
 Tracked Activity
@@ -189,7 +189,7 @@ The high-level AEGIS architecture is:
                          │         Users           │
                          │                         │
                          │  Administrator          │
-                         │  Trainer                │
+                         │  Content Consumer       │
                          └────────────┬────────────┘
                                       │
                                       │ HTTPS
@@ -339,7 +339,7 @@ AEGIS consists of the following major technical components.
 
 ## 6.1 Web Browser
 
-The browser is the client environment used by administrators and trainers.
+The browser is the client environment used by administrators and Content Consumers.
 
 ### Responsibilities
 
@@ -749,13 +749,13 @@ Secure content delivery is one of the most important components of AEGIS.
 
 The goal is:
 
-> **Allow an authorized trainer to consume protected training material without treating the original source file as an ordinary downloadable resource.**
+> **Allow an authorized Content Consumer to consume protected training material without treating the original source file as an ordinary downloadable resource.**
 > 
 
 Conceptually:
 
 ```
-Trainer
+Content Consumer
    │
    ▼
 React Content Viewer
@@ -954,9 +954,9 @@ Examples include:
 - Content viewing
 - Training-related interactions
 - Access attempts
-- Other significant trainer interactions
+- Other significant Content Consumer interactions
 
-The project proposal explicitly identifies access logging and trainer activity tracking as core capabilities.
+The project proposal explicitly identifies access logging and Content Consumer activity tracking as core capabilities.
 
 ---
 
@@ -1053,10 +1053,10 @@ Authentication event metadata must be minimal and sanitized, and must never incl
 
 # 28. End-to-End Authentication and Content Access Flow
 
-The complete trainer access flow is:
+The complete Content Consumer access flow is:
 
 ```
-Trainer
+Content Consumer
    │
    ▼
 React Frontend
@@ -1902,16 +1902,16 @@ The complete AEGIS system can be represented as:
 
 ---
 
-# 54. Complete Trainer Content Access Sequence
+# 54. Complete Content Consumer Content Access Sequence
 
 ```
-1. Trainer opens AEGIS
+1. Content Consumer opens AEGIS
           │
           ▼
 2. React loads
           │
           ▼
-3. Trainer authenticates
+3. Content Consumer authenticates
           │
           ▼
 4. Django validates identity
@@ -1923,7 +1923,7 @@ The complete AEGIS system can be represented as:
 6. Organization context established
           │
           ▼
-7. Trainer requests training content
+7. Content Consumer requests content
           │
           ▼
 8. Django validates authorization
@@ -1950,7 +1950,7 @@ The complete AEGIS system can be represented as:
 15. Content delivered to viewer
           │
           ▼
-16. Trainer activity tracked
+16. Content Consumer activity tracked
           │
           ▼
 17. Significant events recorded in audit
@@ -2545,7 +2545,7 @@ The final conceptual architecture is:
                         │    Users     │
                         │              │
                         │ Admin        │
-                        │ Trainer      │
+                        │ Content Consumer │
                         └──────┬───────┘
                                │
                                ▼

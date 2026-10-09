@@ -322,7 +322,7 @@ Primary:
 
 - Administrator
 - Content Manager
-- Trainer
+- Content Consumer
 - Management
 
 System:
@@ -516,7 +516,7 @@ The functional architecture recognizes the following roles:
 ```
 Administrator
 Content Manager
-Trainer
+Content Consumer
 Management
 ```
 
@@ -530,9 +530,9 @@ Broad organizational/system management responsibilities.
 
 Responsible primarily for knowledge/content operations.
 
-### Trainer
+### Content Consumer
 
-Consumes authorized training content for training delivery.
+Accesses and consumes organizational content according to assigned permissions and access grants.
 
 ### Management
 
@@ -809,7 +809,7 @@ User can access content
 
 ## 14.1 Responsibility
 
-Determine which users/trainers are authorized to access particular training resources.
+Determine which users/Content Consumers are authorized to access particular training resources.
 
 ---
 
@@ -817,7 +817,7 @@ Determine which users/trainers are authorized to access particular training reso
 
 - Administrator
 - Content Manager where authorized
-- Trainer as access recipient
+- Content Consumer as access recipient
 
 ---
 
@@ -878,7 +878,7 @@ Secure browser-based viewing is one of the core capabilities identified for AEGI
 
 ## 15.2 Actors
 
-- Trainer
+- Content Consumer
 - Authorized User
 - Management where viewing permission exists
 
@@ -900,7 +900,7 @@ Secure browser-based viewing is one of the core capabilities identified for AEGI
 ## 15.4 Main Workflow
 
 ```
-Trainer
+Content Consumer
    ↓
 Select Training Content
    ↓
@@ -977,7 +977,7 @@ Primarily:
 
 Indirectly:
 
-- Trainer
+- Content Consumer
 - Authorized User
 
 ---
@@ -1190,11 +1190,11 @@ Examples:
 - Content usage frequency
 - Version usage
 
-### Trainer Activity Analytics
+### Content Consumer Activity Analytics
 
 Examples:
 
-- Trainer access frequency
+- Content Consumer access frequency
 - Content usage
 - Training-resource utilization
 - Activity trends
@@ -1224,7 +1224,7 @@ Reports may include:
 
 ```
 Content Usage Report
-Trainer Activity Report
+Content Consumer Activity Report
 Access Report
 Audit Report
 Security Activity Report
@@ -1279,7 +1279,7 @@ Each configurable capability should remain owned by its functional module.
 
 # 21. Actor-to-Module Matrix
 
-| Module | Administrator | Content Manager | Trainer | Management |
+| Module | Administrator | Content Manager | Content Consumer | Management |
 | --- | --- | --- | --- | --- |
 | Authentication | ✓ | ✓ | ✓ | ✓ |
 | Organization Management | ✓ | — | — | — |
@@ -1299,6 +1299,7 @@ Each configurable capability should remain owned by its functional module.
 - = permission-dependent, not automatic.
 
 The matrix is functional rather than a final RBAC implementation.
+For the Content Consumer role, “Limited” analytics and reports means the user's own activity and reports for content/programs assigned to that user only; it does not include organization-wide analytics, audit data, or security events.
 
 ---
 
@@ -1405,12 +1406,12 @@ Program Available
 
 ---
 
-# 27. WF-06 — Grant Trainer Access
+# 27. WF-06 — Grant Content Consumer Access
 
 ```
 Authorized Administrator
           ↓
-Select Trainer
+Select Content Consumer
           ↓
 Select Training Context
           ↓
@@ -1423,10 +1424,10 @@ Audit Access Grant
 
 ---
 
-# 28. WF-07 — Trainer Accesses Content
+# 28. WF-07 — Content Consumer Accesses Content
 
 ```
-Trainer
+Content Consumer
  ↓
 Login
  ↓
@@ -1870,7 +1871,7 @@ The MVP should include:
 ✓ Content Versioning
 ✓ Training Programs
 ✓ Content Assignment
-✓ Controlled Trainer Access
+✓ Controlled Content Consumer Access
 ✓ Secure Browser-Based Delivery
 ✓ Dynamic Watermarking
 ✓ Activity Tracking
@@ -1890,7 +1891,7 @@ This is consistent with the established project scope, which includes user/role 
 The following should remain outside the MVP functional architecture:
 
 ```
-AI Trainer Performance Analysis
+AI Content Consumer Performance Analysis
 AI Content Recommendations
 AI-Generated Training Insights
 Advanced DRM
@@ -2113,7 +2114,7 @@ This chain represents the **functional backbone of AEGIS**.
 
 The product is therefore not simply:
 
-> “A website where trainers view presentations.”
+> “A website where Content Consumers view presentations.”
 > 
 
 It is functionally:

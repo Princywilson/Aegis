@@ -165,7 +165,7 @@ Can:
 
 ---
 
-## User
+## Content Consumer
 
 Can:
 
@@ -448,7 +448,7 @@ Architecture should support future expansion.
 	             Users
           Administrator
           Content Manager
-              Trainer
+              Content Consumer
              Management
                   │
                   ▼

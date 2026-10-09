@@ -144,7 +144,7 @@ Users belong to an Organization and perform actions according to their assigned 
 The domain currently identifies two primary operational categories:
 
 - Administrator
-- Trainer
+- Content Consumer
 
 The model should remain flexible enough to support additional roles later.
 
@@ -184,7 +184,7 @@ Roles provide the foundation for **role-based access control (RBAC)**.
 
 ```
 Administrator
-Trainer
+Content Consumer
 ```
 
 The actual role structure can be expanded later without changing the fundamental domain.
@@ -201,14 +201,11 @@ Responsible for organization-level management, including areas such as:
 - Reviewing activity
 - Reviewing audit information
 
-### Trainer
+### Content Consumer
 
-Primarily responsible for:
+A user authorized to access and consume organizational content according to assigned permissions and access grants.
 
-- Accessing authorized training content
-- Using content for training delivery
-- Viewing permitted content versions
-- Performing activities that are tracked by AEGIS
+This is a role assigned to a `User`, not a separate user type or entity. Renaming it does not change its existing permissions.
 
 ### Relationship
 
@@ -399,7 +396,7 @@ Represents the business relationship that determines which content is associated
 
 This is important because:
 
-> A Content item existing inside an organization does not automatically mean that every trainer can access it.
+> A Content item existing inside an organization does not automatically mean that every Content Consumer can access it.
 > 
 
 Conceptually:
@@ -448,8 +445,8 @@ This allows AEGIS to answer questions such as:
 
 - Who is allowed to access this content?
 - What training context is the content being accessed for?
-- What content was available to the trainer?
-- When did the trainer access it?
+- What content was available to the Content Consumer?
+- When did the Content Consumer access it?
 - What activity occurred during access?
 
 This controlled-access model is central to the project's objective of protecting proprietary training resources.
@@ -467,13 +464,13 @@ It is distinct from authorization.
 ### Authorization
 
 ```
-"Trainer A is allowed to access Content X."
+"Content Consumer A is allowed to access Content X."
 ```
 
 ### Access
 
 ```
-"Trainer A accessed Content X at this point in time."
+"Content Consumer A accessed Content X at this point in time."
 ```
 
 This distinction is essential for security and auditing.
@@ -509,7 +506,7 @@ Conceptually, activity may include:
 - Training material opened
 - Training-related interaction
 - Access attempts
-- Other tracked trainer activities
+- Other tracked Content Consumer activities
 
 ### Relationship
 
@@ -523,7 +520,7 @@ User
           └── Security-related activity
 ```
 
-The project proposal specifically identifies access logging and trainer activity tracking as part of the proposed solution.
+The project proposal specifically identifies access logging and Content Consumer activity tracking as part of the proposed solution.
 
 ---
 
@@ -553,7 +550,7 @@ For example:
 
 ```
 Activity:
-Trainer viewed training content.
+Content Consumer viewed training content.
 
 Audit:
 Content access occurred for a protected resource.
@@ -798,7 +795,7 @@ The security layer then surrounds the content-delivery process:
                     Protected Content
                              │
                              ▼
-                       Trainer/User
+                 Content Consumer/User
 ```
 
 This keeps the MCA implementation achievable while preserving the architecture required for future expansion.
@@ -811,11 +808,11 @@ The following concepts should **not** be introduced as core MVP domain entities 
 
 They remain future possibilities identified in the project direction:
 
-### AI Trainer Performance Analysis
+### AI Content Consumer Performance Analysis
 
 ```
 Future:
-Trainer Activity
+Content Consumer Activity
       │
       ▼
 AI Analysis
@@ -844,7 +841,7 @@ This is a future content-delivery/security capability.
 
 Future integrations may connect AEGIS with other applications.
 
-These future enhancements are consistent with the project proposal, which identifies AI-based trainer analytics, DRM-inspired protection, live training analytics, mobile support, offline encrypted viewing and application integrations as future scope.
+These future enhancements are consistent with the project proposal, which identifies AI-based Content Consumer analytics, DRM-inspired protection, live training analytics, mobile support, offline encrypted viewing and application integrations as future scope.
 
 ---
 
@@ -882,17 +879,17 @@ Audit
 = accountability/security record
 ```
 
-### User ≠ Trainer
+### User ≠ Content Consumer
 
 ```
 User
 = authenticated person
 
-Trainer
+Content Consumer
 = a business role/capability performed by a user
 ```
 
-This means we should avoid making `Trainer` a completely separate fundamental identity from `User` unless future requirements demonstrate that it needs to be.
+This means `Content Consumer` is a role assigned to a `User`, not a separate fundamental identity or entity.
 
 ### Training Program ≠ Content
 

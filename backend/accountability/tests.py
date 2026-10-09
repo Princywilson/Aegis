@@ -1,9 +1,18 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from io import StringIO
+from threading import Barrier
+from unittest import skipUnless
 
 from django.core.management import call_command
-from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.db import (
+    IntegrityError,
+    close_old_connections,
+    connection,
+    connections,
+    transaction,
+)
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
 from identity.models import Organization, User
@@ -77,11 +86,16 @@ class AuthenticationRateLimitCounterTests(TestCase):
                 now=now + timedelta(seconds=5),
             )
         )
-        event = SecurityEvent.objects.filter(event_type="LOGIN_FAILURE").latest(
-            "occurred_at"
+        events = list(
+            SecurityEvent.objects.filter(event_type="LOGIN_FAILURE")
         )
-        self.assertEqual(event.severity, SecurityEvent.Severity.MEDIUM)
-        self.assertTrue(event.metadata["rate_limit_triggered"])
+        self.assertEqual(len(events), 5)
+        self.assertTrue(
+            all(event.severity == SecurityEvent.Severity.MEDIUM for event in events)
+        )
+        self.assertTrue(
+            any(event.metadata["rate_limit_triggered"] for event in events)
+        )
 
     def test_source_ip_is_blocked_after_twenty_failures(self):
         now = timezone.now()
@@ -180,4 +194,66 @@ class AuthenticationRateLimitCounterTests(TestCase):
         )
         self.assertTrue(
             AuthenticationRateLimitCounter.objects.filter(pk=active.pk).exists()
+        )
+
+
+@skipUnless(
+    connection.vendor == "postgresql",
+    "PostgreSQL row-lock behavior must be verified on PostgreSQL.",
+)
+class AuthenticationRateLimitConcurrencyTests(TransactionTestCase):
+    def _record_failures_concurrently(self, requests):
+        barrier = Barrier(len(requests))
+
+        def record_failure(request):
+            close_old_connections()
+            try:
+                barrier.wait(timeout=15)
+                return record_login_failure(*request)
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=len(requests)) as executor:
+            return list(executor.map(record_failure, requests))
+
+    def test_concurrent_account_failures_do_not_exceed_account_limit(self):
+        requests = [
+            ("example", "person@example.com", "192.0.2.30")
+            for _ in range(8)
+        ]
+
+        results = self._record_failures_concurrently(requests)
+
+        account_counter = AuthenticationRateLimitCounter.objects.get(
+            key_type=AuthenticationRateLimitCounter.KeyType.ACCOUNT
+        )
+        self.assertEqual(sum(results), 4)
+        self.assertEqual(len(account_counter.failure_timestamps), 5)
+        self.assertIsNotNone(account_counter.blocked_until)
+        self.assertEqual(
+            SecurityEvent.objects.filter(event_type="LOGIN_FAILURE").count(),
+            5,
+        )
+
+    def test_concurrent_source_ip_failures_do_not_exceed_ip_limit(self):
+        requests = [
+            (
+                f"organization-{attempt}",
+                f"person-{attempt}@example.com",
+                "192.0.2.40",
+            )
+            for attempt in range(25)
+        ]
+
+        results = self._record_failures_concurrently(requests)
+
+        source_ip_counter = AuthenticationRateLimitCounter.objects.get(
+            key_type=AuthenticationRateLimitCounter.KeyType.SOURCE_IP
+        )
+        self.assertEqual(sum(results), 6)
+        self.assertEqual(len(source_ip_counter.failure_timestamps), 20)
+        self.assertIsNotNone(source_ip_counter.blocked_until)
+        self.assertEqual(
+            SecurityEvent.objects.filter(event_type="LOGIN_FAILURE").count(),
+            20,
         )

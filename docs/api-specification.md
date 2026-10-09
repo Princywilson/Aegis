@@ -30,7 +30,7 @@ The API provides controlled access to:
 - Content versioning
 - Training programs
 - Content assignments
-- Trainer access
+- Content Consumer access
 - Secure content delivery
 - Activity tracking
 - Audit records
@@ -637,7 +637,7 @@ Required.
 ```
 ?page=1
 &page_size=20
-&role=trainer
+&role=content_consumer
 &status=active
 &search=John
 ```
@@ -653,7 +653,7 @@ Required.
             "email": "john@example.com",
             "status": "active",
             "roles": [
-                "Trainer"
+                "Content Consumer"
             ]
         }
     ],
@@ -696,7 +696,7 @@ Required.
     "name": "John Trainer",
     "email": "john@example.com",
     "role_ids": [
-        "role_trainer"
+        "role_content_consumer"
     ]
 }
 ```
@@ -719,7 +719,7 @@ Required.
         "email": "john@example.com",
         "status": "active",
         "roles": [
-            "Trainer"
+            "Content Consumer"
         ]
     }
 }
@@ -761,7 +761,7 @@ Required.
         "email": "john@example.com",
         "status": "active",
         "roles": [
-            "Trainer"
+            "Content Consumer"
         ]
     }
 }
@@ -833,8 +833,8 @@ Required.
             "name": "Administrator"
         },
         {
-            "id": "role_trainer",
-            "name": "Trainer"
+            "id": "role_content_consumer",
+            "name": "Content Consumer"
         }
     ]
 }
@@ -1595,10 +1595,10 @@ This must remain separate from actual Content Access.
 
 ```
 Authorization:
-"Trainer A may access Content X."
+"Content Consumer A may access Content X."
 
 Actual Access:
-"Trainer A accessed Content X."
+"Content Consumer A accessed Content X."
 ```
 
 This distinction is established in the domain model.
@@ -1733,7 +1733,7 @@ The API must not simply return:
 original_file_url
 ```
 
-to an authorized trainer.
+to an authorized Content Consumer.
 
 Instead, the backend controls the delivery process.
 
@@ -1888,9 +1888,9 @@ Examples include:
 - Training material opened
 - Content accessed
 - Access attempts
-- Trainer interactions
+- Content Consumer interactions
 
-The project proposal explicitly identifies access logging and trainer activity tracking as core capabilities.
+The project proposal explicitly identifies access logging and Content Consumer activity tracking as core capabilities.
 
 ---
 
@@ -2133,7 +2133,7 @@ The exact analytics metrics are subject to the finalized functional architecture
 
 ---
 
-# 54. Trainer Activity Analytics
+# 54. Content Consumer Activity Analytics
 
 ```
 GET /api/v1/analytics/trainers
@@ -2159,7 +2159,9 @@ Required.
 }
 ```
 
-Advanced AI-based trainer performance analysis remains future scope rather than an MVP API dependency. The project proposal identifies AI-based trainer performance analytics as a future enhancement.
+Advanced AI-based Content Consumer performance analysis remains future scope rather than an MVP API dependency. The project proposal identifies AI-based Content Consumer performance analytics as a future enhancement.
+
+The aggregate response above is outside the Content Consumer's approved analytics scope. The legacy permission identifier and endpoint must not be assigned to this role unless the completed permission matrix explicitly permits an appropriately scoped response.
 
 ---
 
@@ -2167,7 +2169,7 @@ Advanced AI-based trainer performance analysis remains future scope rather than 
 
 A simplified conceptual authorization matrix is:
 
-| API Area | Administrator | Trainer |
+| API Area | Administrator | Content Consumer |
 | --- | --- | --- |
 | Login | ✓ | ✓ |
 | Own Profile | ✓ | ✓ |
@@ -2191,7 +2193,7 @@ A simplified conceptual authorization matrix is:
 | Analytics | ✓ | Limited |
 - Subject to the actual permission/access model.
 
-This matrix is a high-level API authorization baseline; the detailed permission matrix belongs to the security/functional design.
+This matrix is a high-level API authorization baseline; the detailed permission matrix belongs to the security/functional design. For the Content Consumer role, limited activity/report access is restricted to the user's own activity and reports for content/programs assigned to that user.
 
 ---
 
@@ -2370,7 +2372,7 @@ GET /api/v1/content?status=published
 ```
 
 ```
-GET /api/v1/users?role=trainer&status=active
+GET /api/v1/users?role=content_consumer&status=active
 ```
 
 ```
@@ -2573,7 +2575,7 @@ Response
 
 # 68. Example End-to-End Content Flow
 
-A trainer opens a training program.
+A Content Consumer opens a training program.
 
 ```
 GET /api/v1/training-programs/{id}
@@ -2591,7 +2593,7 @@ Training Access
 Program Access
 ```
 
-The trainer selects protected content.
+The Content Consumer selects protected content.
 
 ```
 POST /api/v1/content/{id}/access
@@ -2636,7 +2638,7 @@ Audit / Security Event where applicable
 This provides the central AEGIS flow:
 
 ```
-Authorized Trainer
+Authorized Content Consumer
        ↓
 Training Program
        ↓
@@ -2758,7 +2760,7 @@ This preserves the domain distinctions established earlier.
 | 37 | GET | `/audits` | Audit history |
 | 38 | GET | `/security-events` | Security events |
 | 39 | GET | `/analytics/content` | Content analytics |
-| 40 | GET | `/analytics/trainers` | Trainer analytics |
+| 40 | GET | `/analytics/trainers` | Content Consumer analytics |
 
 ---
 
@@ -2827,7 +2829,7 @@ Content Management Screen
 ```
 
 ```
-Trainer Content Viewer
+Content Consumer Content Viewer
      │
      ├── POST /api/v1/content/{id}/access
      └── GET  /api/v1/content/{id}/delivery
@@ -2939,7 +2941,7 @@ Controlled Response
 The most security-sensitive AEGIS operation remains:
 
 ```
-Trainer
+Content Consumer
    ↓
 Authenticate
    ↓

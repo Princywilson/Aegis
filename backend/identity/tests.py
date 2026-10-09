@@ -8,6 +8,7 @@ from unittest.mock import patch
 from rest_framework.test import APIClient
 
 from accountability.models import AuthenticationRateLimitCounter, SecurityEvent
+from accountability.services import _counter_keys
 from .models import Organization, User
 
 
@@ -280,6 +281,16 @@ class AuthenticationApiTests(TestCase):
             key_type=AuthenticationRateLimitCounter.KeyType.SOURCE_IP
         )
         self.assertEqual(len(ip_counter.failure_timestamps), 20)
+        expected_ip_key_hash = next(
+            key_hash
+            for key_type, key_hash in _counter_keys(
+                "unknown",
+                "person-0@example.com",
+                "192.0.2.50",
+            )
+            if key_type == AuthenticationRateLimitCounter.KeyType.SOURCE_IP
+        )
+        self.assertEqual(ip_counter.key_hash, expected_ip_key_hash)
 
     def test_inactive_user_cannot_log_in(self):
         self.user.status = User.Status.INACTIVE

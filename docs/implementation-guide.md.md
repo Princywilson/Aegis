@@ -119,7 +119,7 @@ The MVP includes:
 - Content Versioning
 - Training Programs
 - Content Assignment
-- Controlled Trainer Access
+- Controlled Content Consumer Access
 - Secure Browser-Based Delivery
 - Dynamic Watermarking
 - Activity Tracking
@@ -523,11 +523,12 @@ The MVP role set is:
 ```text
 Administrator
 Content Manager
-Trainer
+Content Consumer
 Management
 ```
 
 Do not use Django Groups as the AEGIS role model.
+Renaming the role does not create a separate user entity/table or change its permissions. Preserve the former Trainer role's permission associations exactly; do not infer or grant capabilities from the new name. Before implementing M3, document the complete role-to-permission mapping because the current conceptual matrices do not define it permission by permission.
 
 ---
 
@@ -936,7 +937,7 @@ Create:
 ```text
 Administrator
 Content Manager
-Trainer
+Content Consumer
 Management
 ```
 
@@ -1675,7 +1676,7 @@ Attempt:
 
 ```text
 User → admin endpoint
-Trainer → content management endpoint
+Content Consumer → content management endpoint
 Management → content mutation endpoint
 cross-organization access
 direct object ID manipulation
@@ -1728,7 +1729,7 @@ Create an end-to-end test scenario.
 1. Create Organization A
 2. Create Administrator
 3. Create Content Manager
-4. Create Trainer
+4. Create Content Consumer
 5. Create Management user
 6. Login as Administrator
 7. Create content
@@ -1736,8 +1737,8 @@ Create an end-to-end test scenario.
 9. Publish Version 1
 10. Create Training Program
 11. Assign content
-12. Grant Trainer access
-13. Login as Trainer
+12. Grant Content Consumer access
+13. Login as Content Consumer
 14. Open protected content
 15. Generate content access
 16. Generate watermark
@@ -2048,7 +2049,7 @@ Organization
    ↓
 File sharing
    ↓
-Trainer receives source file
+Content Consumer receives source file
    ↓
 File can be copied/shared
    ↓
@@ -2086,7 +2087,7 @@ Use two organizations.
 Show:
 
 ```text
-Organization A trainer
+Organization A Content Consumer
        X
 Organization B content
 ```
@@ -2212,7 +2213,7 @@ Target:
 ```text
 Program
 Assignment
-Trainer access
+Content Consumer access
 Authorization
 ```
 

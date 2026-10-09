@@ -45,7 +45,7 @@ The database design must support the established AEGIS principles:
 Security First
 Multi-Tenant
 Cloud Native
-Simple for Trainers
+Simple for Content Consumers
 Scalable
 Auditable
 ```
@@ -343,7 +343,7 @@ Initial operational roles:
 
 ```
 Administrator
-Trainer
+Content Consumer
 ```
 
 The architecture remains extensible for future roles.
@@ -814,7 +814,7 @@ Content
     ↓
 Version 3
     ↓
-Trainer accessed Version 3
+Content Consumer accessed Version 3
 ```
 
 must remain historically determinable even after Version 4 becomes current.
@@ -1628,7 +1628,7 @@ The actual storage provider and infrastructure will be finalized during System A
 The intended access flow is:
 
 ```
-Trainer
+Content Consumer
    │
    ▼
 Authenticate
@@ -1676,10 +1676,10 @@ Example:
 
 ```
 Activity:
-Trainer opened Content X.
+Content Consumer opened Content X.
 
 Audit:
-Protected Content X was accessed by Trainer A
+Protected Content X was accessed by Content Consumer A
 at time T.
 ```
 
@@ -1708,7 +1708,7 @@ If corrections are ever required, they should themselves be traceable.
 | --- | --- | --- |
 | Track normal user activity | ✓ |  |
 | Content usage analytics | ✓ |  |
-| Trainer activity | ✓ |  |
+| Content Consumer activity | ✓ |  |
 | Security investigation |  | ✓ |
 | Business change history |  | ✓ |
 | Permission changes |  | ✓ |
@@ -2201,10 +2201,10 @@ Training Program Created
 Content Assigned to Program
         │
         ▼
-Trainer Granted Training Access
+Content Consumer Granted Training Access
         │
         ▼
-Trainer Authenticates
+Content Consumer Authenticates
         │
         ▼
 Authorization Checked
@@ -2267,17 +2267,17 @@ Object Storage
 = training files
 ```
 
-## User ≠ Trainer
+## User ≠ Content Consumer
 
 ```
 User
 = authenticated identity
 
-Trainer
+Content Consumer
 = role/capability of a user
 ```
 
-This avoids creating an unnecessary separate `trainers` table.
+This avoids creating an unnecessary separate role-specific user table.
 
 ---
 

@@ -7,17 +7,24 @@ This file records implementation progress and how to test the work that exists. 
 
 ## Milestone 0: Development Foundation
 
-### Completed
+### Verified
 
-- Inspected the Django project structure, settings, API routing, requirements, environment template, and Docker Compose configuration.
-- Django reads local configuration from `backend/.env`; the example file contains the required variable names without values.
-- The Django system check passes in the current environment.
+- Inspected the Django project structure, settings, API routing, requirements, environment template, migrations, and Docker Compose configuration.
+- Python 3.12.10 and the pinned backend requirements are available in `venv`.
+- `docker info` succeeds and the Compose PostgreSQL 16 service is running.
+- The local PostgreSQL role credentials were aligned to the current Compose configuration to restore host authentication; no application data was changed.
+- Django's system check passes.
+- A custom-format backup of the existing `aegis` database, `aegis-before-migration-repair-20261009.dump`, was created locally, its archive listing verified, and restored into a disposable database before repair.
+- The existing `aegis` database was repaired from the verified backup: the current identity migration is recorded, the login column and missing permission/group join tables match the current model, and the tenant-email constraint uses its current name.
+- All current migrations now apply on `aegis`; `showmigrations` reports them applied and `makemigrations --check --dry-run` reports no changes.
+- Temporary validation and repair-clone databases were removed after successful verification.
 
-### Not yet verified
+### Not yet complete
 
-- The Docker CLI is installed, but `docker info` reports that Docker Desktop cannot start. The database connection and `migrate` command have not been verified against PostgreSQL.
-- The baseline Git checkpoint criterion has not been recorded as complete.
-- Node.js/npm and the remaining toolchain checks in the guide have not been recorded as complete.
+- `backend/.env` is absent. PostgreSQL validation used process-local environment variables; no credentials were added to source or documentation.
+- The legacy recorder entry `identity.0001_initial_organization_and_user` is retained as historical metadata; the current `identity.0001_initial` entry is also recorded, so Django's current migration graph is consistent.
+- Node.js and npm are unavailable, so the full M0 toolchain check is incomplete.
+- The guide's clean-worktree criterion is not met. The pre-existing untracked `Notes.md` was left untouched; implementation changes are also currently uncommitted.
 
 ## Milestone 1: Organization + Custom Identity
 
@@ -27,25 +34,13 @@ This file records implementation progress and how to test the work that exists. 
 - `User` is the configured Django custom user model with a UUID primary key, organization relationship, email, password hash, active/inactive status, names, and timestamps.
 - User email uniqueness is scoped to `(organization, email)`, matching the tenant model.
 - `AUTH_USER_MODEL` points to `identity.User`.
-- A user’s tenant context is available through `user.organization`; no tenant is selected from an arbitrary request parameter.
+- A user's tenant context is available through `user.organization`; no tenant is selected from an arbitrary request parameter.
 - The initial identity migration is present at `backend/identity/migrations/0001_initial.py`.
 
-### Tests implemented
+### Verification
 
-The identity tests cover:
-
-- Django resolves `identity.User` as its configured user model.
-- Organization and user IDs are UUIDs, and the user belongs to the expected organization.
-- Inactive user status is reflected by `is_active`.
-- Passwords are stored hashed and can be verified with Django’s password checker.
-- The same email can exist in different organizations, and user queries scoped to each organization return only that organization’s user.
-- A duplicate email within the same organization is rejected by the database constraint.
-
-**Current result:** the six foundation tests pass within the identity suite using an in-memory SQLite test database. The migration check reports no model/migration drift. PostgreSQL application of the migration and PostgreSQL test execution remain pending; use [Docker-Available Checklist](docker-available-checklist.md) to complete them.
-
-### Important boundary
-
-The identity foundation is distinct from session authentication. Django’s `auth.E003` and `auth.W004` checks are silenced because AEGIS intentionally makes email unique per organization; the configured backend authenticates using organization slug and email together.
+- Identity behavior and migrations pass against the configured PostgreSQL database.
+- The repaired database's `users.last_login_at`, tenant-scoped email constraint, and Django permission/group relations were exercised through the ORM.
 
 ## Milestone 2: Authentication + Session Management
 
@@ -57,37 +52,44 @@ The identity foundation is distinct from session authentication. Django’s `aut
 - Django session cookies, CSRF protection for unsafe requests, and credentialed development CORS.
 - A consistent JSON error envelope for API and CSRF failures.
 - `/me` returns identity and organization details; role and permission arrays remain empty until M3.
+- Shared account/IP rate-limit counters use PostgreSQL row locks and hashed keys. PostgreSQL-only concurrency tests cover both the five-failure account threshold and the twenty-failure source-IP threshold across independent database connections.
+- The source-IP API test confirms the rate-limit key is derived from `REMOTE_ADDR`, not an arbitrary `X-Forwarded-For` header.
 
-### Tests implemented
+### Verification
 
-The identity/authentication suite covers model constraints, scoped authentication, login success/failure, inactive users, session creation, `/me`, logout, invalid/expired sessions, request validation, CSRF, rate-limit responses, and authentication event scope. The accountability suite covers event severity constraints, account/IP limits, rolling-window expiry, successful-login counter clearing, and stale-counter cleanup.
+- The complete Django suite passes against the configured PostgreSQL database: 35 tests, including the PostgreSQL-only concurrency tests.
+- The SQLite suite passes 33 tests; its two PostgreSQL-only concurrency tests are skipped. SQLite results do not substitute for the PostgreSQL result above.
+- Django's system check passes and `makemigrations --check --dry-run` reports no migration drift.
+- Separate Python worker processes concurrently submitted 8 attempts for one account and 25 attempts across accounts for one source IP on the repaired clone. The persisted counters capped at 5 and 20 respectively, with 25 expected failure events.
+- Production session/CSRF cookie settings were checked with `DEBUG=False`: HttpOnly, Secure, CSRF Secure, and the configured 14-day session age.
+- The threshold-trigger event assertion is order-independent, avoiding reliance on tied event timestamps.
 
-**Current result:** all 33 tests pass with an in-memory SQLite test database. `manage.py check` passes and `makemigrations --check --dry-run` reports no migration drift. PostgreSQL verification remains pending.
+### Operational follow-ups
 
-### Still pending
+- Production scheduling for `cleanup_auth_rate_limits` is environment-specific and is not configured in this repository.
+- Security-event read authorization tests belong with the future security-event monitoring API; organization users must never see platform-level or other-tenant events.
+- The `activity_events` model is not implemented yet; validate its required organization ownership when its milestone begins.
 
-- Accepted [ADR-0001](adr/0001-security-event-scope.md) and updated the Business Rules, Data Architecture, System Architecture, and API Specification: one Security Event model uses a nullable organization only for platform-scoped events before tenant resolution. Activity event organization ownership remains required.
-- Implemented the documented `SecurityEvent` model in `backend/accountability/`, including its initial migration and nullable organization/optional user fields. Model tests cover platform scope without organization/user and tenant scope with a resolved organization.
-- [ADR-0002](adr/0002-authentication-events-and-rate-limits.md) defines severity values and authentication-event mappings, plus the account/IP rate-limit policy.
-- Authentication success, failure, logout, and rate-limit-trigger events are persisted using the documented scope and severity. Raw account identifiers, IPs, passwords, and session tokens are not stored in counter records.
-- Shared account/IP counters use PostgreSQL row locks and hashed keys. SQLite tests do not validate PostgreSQL concurrency behavior.
-- `cleanup_auth_rate_limits` removes stale counter rows; production scheduling is environment-specific and not configured in this repository.
-- Security-event read authorization tests must be added when the documented security-event monitoring API is implemented; organization users must never see platform-level or other-tenant events.
-- M2 is not fully closed, and M3 should not begin yet.
-- PostgreSQL migration and test runs remain blocked by Docker Desktop; see [Docker-Available Checklist](docker-available-checklist.md).
+## How to Test Now
 
-**Current result:** Django system check passes, `makemigrations --check --dry-run` reports no changes, and all 33 identity/authentication/security-event/rate-limit tests pass on in-memory SQLite. PostgreSQL verification remains pending.
+### SQLite development checks
 
-## How to Test Now (Docker Unavailable)
-
-Run this PowerShell command from the repository root. It temporarily selects an in-memory SQLite database for this process only, then checks Django, checks migration consistency across apps, and runs the identity, authentication, and accountability tests:
+Run from the repository root. Test-only environment values let Django load settings when `backend/.env` is absent; the command then replaces the database with in-memory SQLite. It checks configuration and migration consistency, then runs the implemented identity and accountability tests. The PostgreSQL-only concurrency cases are skipped.
 
 ```powershell
-.\venv\Scripts\python.exe -c "import os,sys; sys.path.insert(0,'backend'); os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); from django.conf import settings; settings.DATABASES={'default':{'ENGINE':'django.db.backends.sqlite3','NAME':':memory:'}}; import django; django.setup(); from django.core.management import call_command; call_command('check'); call_command('makemigrations','--check','--dry-run'); call_command('test','identity','accountability',verbosity=1)"
+.\venv\Scripts\python.exe -c "import os,sys; os.environ.update({'DJANGO_SECRET_KEY':'sqlite-test-only-secret','DJANGO_DEBUG':'true','POSTGRES_DB':'unused','POSTGRES_USER':'unused','POSTGRES_PASSWORD':'unused','POSTGRES_HOST':'127.0.0.1','POSTGRES_PORT':'5432'}); sys.path.insert(0,'backend'); os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); from django.conf import settings; settings.DATABASES={'default':{'ENGINE':'django.db.backends.sqlite3','NAME':':memory:'}}; import django; django.setup(); from django.core.management import call_command; call_command('check'); call_command('makemigrations','--check','--dry-run'); call_command('test','identity','accountability',verbosity=1)"
 ```
 
-Expected results include a clean system check, `No changes detected`, and 33 passing tests. This verifies model behavior, API behavior, and migration application on SQLite only; it does not replace PostgreSQL checks or concurrency verification in the Docker checklist.
+Expected results: a clean system check, `No changes detected`, and 35 tests with two PostgreSQL-only tests skipped.
+
+### PostgreSQL integration checks
+
+Use a clean PostgreSQL database and set the Django/PostgreSQL environment variables privately before running. Do not put credentials in this file. Run `.\venv\Scripts\python.exe backend\manage.py test identity accountability` from the repository root, or run `manage.py test` from `backend\` to discover the complete suite. Running bare `manage.py test` from the repository root discovers zero tests in this layout.
 
 ## Next Implementation Step
 
-After PostgreSQL is available, complete the M0/M1/M2 database and concurrent rate-limit checks in the Docker checklist. Then close M2 and proceed to M3 RBAC. Security-event read-authorization tests belong with the future security-event monitoring API. Do not add authentication or organization-status rules that are not specified in the AEGIS docs.
+M0/M1 database gates and M2 PostgreSQL integration checks now pass. The approved domain-neutral role name is `Content Consumer`, defined as a user authorized to access and consume organizational content according to assigned permissions and access grants. This is a role of the existing `User`, not a separate user type/entity/table. The documentation rename does not change runtime authorization. Preserve the former Trainer role's permission associations exactly; do not infer additional permissions from the new name. The agreed high-level access boundary is assigned/authorized content and permitted current versions, searching only that authorized content, secure content delivery without source-file download/sharing, no content mutation/publishing/archiving/version creation/assignment changes absent separate explicit permission, and tracking significant content interactions. Limited analytics/report access is restricted to the user's own activity and reports for content/programs assigned to them; organization-wide analytics and audit/security-event access are excluded.
+
+M3 RBAC implementation remains gated: current functional/API authorization tables are conceptual and do not establish a complete permission-by-permission role matrix. Their shared baseline grants sign-in, own-profile access, authorized content viewing/delivery and activity tracking; the functional matrix additionally indicates content/version/program viewing and watermark consumption. Both describe limited analytics, and the functional matrix also describes limited reports; these are bounded to the user's own activity and assigned content/programs. The API matrix explicitly excludes organization/user/role/permission management, content creation/management, version creation/publication, program management, assignment and access-grant management, audit, and security-event access. Before implementation, reconcile the summaries into an explicit capability-to-role mapping that preserves this agreed scope and the former Trainer associations, then implement the rename without changing authorization behavior. Legacy trainer-analytics API paths, permission identifiers, and response fields are unchanged by this documentation-only role rename; the aggregate analytics response is outside the Content Consumer's approved scope unless a completed permission matrix authorizes an appropriately scoped version. Training-specific concepts such as Training Program, Training Access, and Trainer Access are separate terminology-review items; their names and behavior have not been changed by the role rename.
+
+M0 still needs Node.js/npm, a local `backend/.env`, and the clean-worktree/baseline checkpoint criteria.

@@ -155,7 +155,7 @@ An authorized consumer is a user who accesses organizational knowledge.
 
 Depending on the organization’s requirements, this may represent:
 
-- Trainer
+- Content Consumer
 - Employee
 - Learner
 - Consultant

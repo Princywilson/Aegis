@@ -45,8 +45,8 @@
     Examples:
     
     - Administrators can manage organizational resources according to their permissions.
-    - Trainers can access content granted to them.
-    - A trainer cannot perform administrative content-management actions unless explicitly authorized.
+    - Content Consumers can access content granted to them.
+    - A Content Consumer cannot perform administrative content-management actions unless explicitly authorized.
     
     ---
     
@@ -78,7 +78,7 @@
     
     The primary purpose of AEGIS is controlled content delivery.
     
-    Authorized trainers should access training material through the secure platform rather than receiving the original presentation files directly.
+    Content Consumers should access training material through the secure platform rather than receiving the original presentation files directly.
     
     This directly supports the project’s core objective of protecting proprietary training material.
     
@@ -110,7 +110,7 @@
     
     A published content version represents an approved version for delivery.
     
-    A trainer must not modify published content.
+    A Content Consumer must not modify published content.
     
     Changes to published material must result in a new content version rather than silently modifying the existing published version.
     
@@ -180,7 +180,7 @@
     
     ## BR-015 — Content Assignment Does Not Automatically Grant User Access
     
-    Assigning content to a Training Program does not by itself mean that every trainer can access that content.
+    Assigning content to a Training Program does not by itself mean that every Content Consumer can access that content.
     
     Content availability and user access remain separate concepts.
     
@@ -202,7 +202,7 @@
     
     An access grant must not provide cross-organization access.
     
-    A trainer from Organization A cannot use an access grant belonging to Organization B.
+    A Content Consumer from Organization A cannot use an access grant belonging to Organization B.
     
     ---
     
@@ -246,21 +246,21 @@
     
     ---
     
-    # Trainer Rules
+    # Content Consumer Rules
     
-    ## BR-021 — Trainer Access is Controlled
+    ## BR-021 — Content Consumer Access is Controlled
     
-    A trainer can access only the training resources authorized for that trainer.
+    A Content Consumer can access only the resources authorized for that user.
     
-    Being registered as a trainer does not itself imply unrestricted access to organizational content.
+    Having the Content Consumer role does not itself imply unrestricted access to organizational content.
     
     ---
     
-    ## BR-022 — Trainers Cannot Modify Organizational Content
+    ## BR-022 — Content Consumers Cannot Modify Organizational Content
     
-    Trainers are consumers/deliverers of authorized training content, not owners of the organization’s proprietary source content.
+    Content Consumers access and consume authorized organizational content; they do not own the organization’s source content.
     
-    Unless explicitly granted an appropriate permission, trainers cannot:
+    Unless explicitly granted an appropriate permission, Content Consumers cannot:
     
     - modify content
     - publish content
@@ -270,11 +270,11 @@
     
     ---
     
-    ## BR-023 — Trainer Activity is Trackable
+    ## BR-023 — Content Consumer Activity is Trackable
     
-    Significant trainer interactions with protected content must be recorded for activity tracking and accountability.
+    Significant Content Consumer interactions with protected content must be recorded for activity tracking and accountability.
     
-    This supports the project’s stated requirement for trainer activity tracking and analytics.
+    This supports the project’s stated requirement for Content Consumer activity tracking and analytics.
     
     ---
     
@@ -438,7 +438,7 @@
     
     The following remain future enhancements rather than mandatory MVP business rules:
     
-    - AI-based trainer performance analysis
+    - AI-based Content Consumer performance analysis
     - DRM-inspired advanced content protection
     - live training analytics
     - mobile application

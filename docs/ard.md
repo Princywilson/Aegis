@@ -244,7 +244,7 @@
     
     ### Context
     
-    The fundamental problem identified for AEGIS is that organizations currently distribute training presentations to trainers, creating risks of copying, reuse and unauthorized distribution.
+    The fundamental problem identified for AEGIS is that organizations currently distribute training presentations to Content Consumers, creating risks of copying, reuse and unauthorized distribution.
     
     ### Decision
     
@@ -260,7 +260,7 @@
         ↓
     Presentation File
         ↓
-    Trainer
+    Content Consumer
         ↓
     Uncontrolled Copying / Distribution
     ```
@@ -275,7 +275,7 @@
         ↓
     Controlled Web Delivery
         ↓
-    Authorized Trainer
+    Authorized Content Consumer
         ↓
     Auditable Activity
     ```
@@ -294,7 +294,7 @@
     
     Organizations need content consistency and historical traceability.
     
-    Changing a published file in place could make it impossible to determine what trainers previously accessed.
+    Changing a published file in place could make it impossible to determine what Content Consumers previously accessed.
     
     ### Decision
     
@@ -368,7 +368,7 @@
     
     AEGIS is not only a content management system. A major product objective is accountability and visibility into content usage.
     
-    The project proposal explicitly includes access logging, trainer activity tracking and audit reports.
+    The project proposal explicitly includes access logging, Content Consumer activity tracking and audit reports.
     
     ### Decision
     
