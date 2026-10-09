@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",
+    "identity",
 ]
 
 MIDDLEWARE = [
@@ -108,6 +109,8 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+AUTH_USER_MODEL = "identity.User"
+SILENCED_SYSTEM_CHECKS = ["auth.E003"]
 
 REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": [

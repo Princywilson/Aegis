@@ -1,0 +1,1 @@
+"""AEGIS identity models and authentication foundation."""
