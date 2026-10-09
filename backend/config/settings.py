@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "identity",
+    "accountability",
 ]
 
 MIDDLEWARE = [
@@ -110,7 +111,15 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "identity.User"
-SILENCED_SYSTEM_CHECKS = ["auth.E003"]
+SILENCED_SYSTEM_CHECKS = ["auth.E003", "auth.W004"]
+AUTHENTICATION_BACKENDS = ["identity.backends.OrganizationEmailBackend"]
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 14
+CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SAMESITE = "Lax"
+CSRF_FAILURE_VIEW = "config.api_errors.csrf_failure"
 
 REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": [
@@ -119,7 +128,10 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "EXCEPTION_HANDLER": "config.api_errors.exception_handler",
 }
 
 if DEBUG:
@@ -133,5 +145,8 @@ if DEBUG:
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
+    CORS_ALLOW_CREDENTIALS = True
+    CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 else:
     CORS_ALLOWED_ORIGINS = []
+    CSRF_TRUSTED_ORIGINS = []

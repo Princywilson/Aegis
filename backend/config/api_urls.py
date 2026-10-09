@@ -1,6 +1,8 @@
-"""API v1 URL namespace.
+"""API v1 URL namespace."""
 
-Business endpoints are not registered yet.
-"""
+from django.urls import include, path
 
-urlpatterns = []
+
+urlpatterns = [
+	path("", include("identity.urls")),
+]

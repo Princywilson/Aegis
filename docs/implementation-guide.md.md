@@ -833,10 +833,13 @@ Implement the approved authentication API.
 Conceptually:
 
 ```text
+GET  /api/v1/auth/csrf/
 POST /api/v1/auth/login/
 POST /api/v1/auth/logout/
 GET  /api/v1/auth/me/
 ```
+
+The CSRF endpoint issues the token required for unsafe session-authenticated requests. Send it in the `X-CSRFToken` header.
 
 Login input:
 
@@ -888,6 +891,8 @@ Development may use HTTP locally; production settings must enforce HTTPS-related
 
 Login success/failure and logout should feed the appropriate security/audit workflows.
 
+Authentication security events use the approved severity mapping in Data Architecture. Login attempts use the documented independent account and source-IP limits; counter state must be shared and atomic rather than process-local.
+
 ## Tests
 
 Test:
@@ -903,6 +908,8 @@ authenticated /me
 logout
 expired/invalid session
 CSRF-protected unsafe requests
+account and source-IP rate limits
+security-event tenant/platform scope and severity
 ```
 
 ---

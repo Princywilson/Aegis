@@ -219,7 +219,8 @@ The initial AEGIS database consists of the following principal entities.
 | Training Access | `training_access` | Yes |
 | Content Access | `content_access` | Yes |
 | Activity Event | `activity_events` | Yes |
-| Security Event | `security_events` | Yes |
+| Security Event | `security_events` | Tenant or platform scoped |
+| Authentication Rate Limit Counter | `authentication_rate_limit_counters` | No / hashed keys |
 | Audit Record | `audit_records` | Yes |
 | Authentication Session | Django session infrastructure | Yes / User-scoped |
 
@@ -889,7 +890,7 @@ SUSPICIOUS_ACTIVITY
 | Column | Type | Required |
 | --- | --- | --- |
 | `id` | UUID | Yes |
-| `organization_id` | UUID | Yes |
+| `organization_id` | UUID | No |
 | `user_id` | UUID | No |
 | `event_type` | VARCHAR | Yes |
 | `severity` | VARCHAR | Yes |
@@ -899,6 +900,60 @@ SUSPICIOUS_ACTIVITY
 | `metadata` | JSONB | No |
 
 Security events are retained independently from ordinary activity because their purpose is security monitoring and investigation.
+
+### Security Event Scope
+
+`organization_id` is nullable only to represent a platform-level event that occurs before a tenant can be resolved. A non-null value identifies a tenant-scoped event. A null value identifies a platform-level event; it must never be treated as belonging to a default organization.
+
+Examples include recording an authentication failure with `organization_id = null` when the supplied organization slug does not resolve, and recording an authentication event with the resolved organization when the organization exists. `user_id` remains nullable for attempts where no user can be resolved.
+
+Activity Events remain organization-owned: `activity_events.organization_id` is required and is not changed by this rule.
+
+Event metadata must be minimal and sanitized. Authentication secrets, including passwords and session tokens, must never be stored. Platform-level events must be restricted to authorized platform-level monitoring; organization-level access must be constrained to events whose `organization_id` matches the authenticated user's organization.
+
+### Security Event Severity and Authentication Event Mapping
+
+Allowed severity values are `INFO`, `LOW`, `MEDIUM`, and `HIGH`. Each event type must have an explicit severity mapping before implementation.
+
+| Event Type | Severity | Description |
+| --- | --- | --- |
+| `LOGIN_SUCCESS` | `INFO` | Authentication completed successfully. |
+| `LOGIN_FAILURE` | `MEDIUM` | An authentication attempt failed, including a rate-limit trigger. |
+| `LOGOUT` | `INFO` | An authenticated session was terminated normally. |
+
+Severity is independent of whether an event is tenant- or platform-scoped. `LOW` and `HIGH` remain available for event types that receive an explicit mapping.
+
+## 21.1 Authentication Rate Limit Counters
+
+### Table
+
+```
+authentication_rate_limit_counters
+```
+
+This technical table provides shared, atomic counter state for login attempts. It is stored in PostgreSQL, not process-local memory.
+
+| Column | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | UUID | Yes | Primary key |
+| `key_type` | VARCHAR | Yes | `ACCOUNT` or `SOURCE_IP` |
+| `key_hash` | VARCHAR(64) | Yes | HMAC-SHA-256 digest; raw identifiers are not stored |
+| `failure_timestamps` | JSONB | Yes | Failed-attempt timestamps in the active rolling window |
+| `blocked_until` | TIMESTAMP | No | End of the active 15-minute block |
+| `updated_at` | TIMESTAMP | Yes | Last counter update |
+
+Constraints:
+
+```
+UNIQUE(key_type, key_hash)
+CHECK(key_type IN ('ACCOUNT', 'SOURCE_IP'))
+```
+
+Counter rows are locked while they are read and updated so concurrent application instances share consistent state. Failure timestamps older than the rolling window are discarded. The counter keys are HMAC-SHA-256 digests of the normalized organization-scoped account identifier or source IP, using the Django secret key; credentials, raw email addresses, and raw IP values are not stored in this table.
+
+Run `python manage.py cleanup_auth_rate_limits` periodically to delete counter rows that have no failures or active block within the rolling window. The deployment scheduler and cadence are environment-specific and must be configured without adding process-local counter storage.
+
+The direct request source address is used for the IP key. Forwarded-IP headers are accepted only if a trusted-proxy configuration is explicitly established; arbitrary client-provided forwarding headers must not be trusted.
 
 ---
 

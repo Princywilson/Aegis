@@ -26,7 +26,7 @@
     - A user belonging to one organization must not be able to access another organization’s resources.
     
     **Principle:** Tenant isolation is a fundamental business rule, not merely a database implementation detail.
-    
+
     ---
     
     ## BR-002 — Users Must Belong to an Organization
@@ -192,21 +192,6 @@
     Content Assignment
        ↓
     Training Program
-    
-    User
-       ↓
-    Training Access
-       ↓
-    Content Access
-    ```
-    
-    ---
-    
-    # Access Rules
-    
-    ## BR-016 — Access Must Be Explicitly Granted
-    
-    A trainer cannot access protected content unless the required access has been granted.
     
     > **No access grant → No content access.**
     > 
@@ -463,3 +448,35 @@
     These are explicitly identified as future enhancements in the project proposal.
     
     ---
+
+            ## BR-037 — Security Events Have Explicit Scope and Severity
+
+            Security events are stored in one security-event model and have either tenant scope or platform scope.
+
+            - A resolved organization is recorded as `organization_id` for tenant-scoped events.
+            - `organization_id` may be null only for platform-level events that occur before organization resolution, such as an authentication attempt using an unknown organization slug.
+            - An unresolved organization attempt must never be assigned to a default or guessed tenant.
+            - Organization-level users must not access platform-level events or events belonging to another organization.
+            - Activity events remain tenant-owned and must always have an organization.
+            - Authentication failures must remain generic to clients regardless of whether organization or user resolution succeeded.
+            - Security event severity must be one of `INFO`, `LOW`, `MEDIUM`, or `HIGH`.
+            - Authentication events use the documented severity mapping in Data Architecture.
+
+            Event metadata must be minimal and sanitized. Passwords, session tokens, and other authentication secrets must never be recorded.
+
+            ---
+
+            ## BR-038 — Authentication Attempts are Rate-Limited
+
+            Apply independent rolling-window limits by normalized organization-scoped account identifier and source IP:
+
+            - Five failed attempts for an account within 15 minutes cause a 15-minute temporary account block.
+            - Twenty failed attempts from a source IP within 15 minutes cause a 15-minute temporary IP block.
+            - A successful login clears that account's failure counter but does not clear the IP counter.
+            - Rate-limit responses remain generic and must not disclose whether an organization or account exists.
+            - Record rate-limit triggers as `LOGIN_FAILURE` Security Events with `MEDIUM` severity and sanitized metadata.
+            - Use shared, atomic storage; process-local counters are not sufficient.
+            - Do not trust arbitrary client-supplied forwarded-IP headers. Use the direct request source unless an explicitly trusted proxy is configured.
+            - Do not log passwords, session tokens, or raw account identifiers in counter storage.
+
+            The independent IP limit, generic responses, and security monitoring reduce account-lockout abuse. Progressive delays or additional controls require a separate documented decision.

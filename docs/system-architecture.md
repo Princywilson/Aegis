@@ -1045,6 +1045,10 @@ Security Event
 
 The exact security-event taxonomy can evolve as the system matures.
 
+Security events use one model with explicit scope. Events are tenant-scoped when an organization has been resolved and platform-scoped when tenant resolution has not occurred; the latter use a null `organization_id`. Platform-level events must not be visible through organization-level monitoring. Activity events remain tenant-scoped and require an organization.
+
+Authentication event metadata must be minimal and sanitized, and must never include passwords, session tokens, or other secrets. Use `INFO` for `LOGIN_SUCCESS` and `LOGOUT`, and `MEDIUM` for `LOGIN_FAILURE`, including rate-limit triggers. Login limits use shared PostgreSQL-backed atomic counters: five failed account attempts or twenty failed source-IP attempts in a rolling 15-minute window cause a 15-minute temporary block. Successful login clears only the account counter. Rate-limit responses remain generic. Do not trust forwarded-IP headers unless their proxy is explicitly trusted.
+
 ---
 
 # 28. End-to-End Authentication and Content Access Flow
