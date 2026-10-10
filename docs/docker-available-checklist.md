@@ -1,7 +1,7 @@
 # Docker-Available Checklist
 
-**Last reviewed:** 2026-10-10
-**Current state:** Docker Engine 29.8.2 and PostgreSQL 16 are available. M3 through M10 migrations, including `knowledge.0006` and `accountability.0008`, are applied to the configured `aegis` database. On 2026-10-10, Django check and migration-drift checks passed and `identity accountability knowledge` passed all **134 tests with no skips** against PostgreSQL after M13/M14 backend coverage. M11 required no schema migration. The M14 PostgreSQL end-to-end API scenario passed; the React frontend is implemented and its 5 unit tests/build pass, but authenticated browser-to-API verification remains pending because Django was not running at the Vite proxy target during the browser check. The earlier SQLite M6 run passed 101 tests with 2 PostgreSQL-only skips and is development evidence only. The existing `aegis` database repair and restore-tested backup (`aegis-before-migration-repair-20261009.dump`) remain documented. Node.js 24.20.0/npm 11.19.0 are installed. `backend/.env` is absent; credentials must remain private.
+**Last reviewed:** 2026-10-11
+**Current state:** Docker Engine 29.8.2 and PostgreSQL 16 are available. M3-M10 migrations, including `knowledge.0006` and `accountability.0008`, are applied to the configured `aegis` database. On 2026-10-11, Django check and migration-drift checks passed and `identity accountability knowledge` passed all **134 tests with no skips** against PostgreSQL. A separate disposable PostgreSQL database was migrated from scratch for the React browser flow; it verified session/CSRF login, content upload/publication, Program assignment/grant, protected PDF delivery, accountability, analytics, reporting, and selected authorization failures. React tests/build pass and `npm audit` reports 0 vulnerabilities. PostgreSQL results are distinct from frontend tests; SQLite is development evidence only. The existing `aegis` database repair and restore-tested backup (`aegis-before-migration-repair-20261009.dump`) remain documented. Node.js 24.20.0/npm 11.19.0 are installed. `backend/.env` is absent; credentials must remain private.
 
 Use this checklist to complete remaining database and manual verification. Do not treat SQLite validation as proof that PostgreSQL integration has passed.
 
@@ -135,7 +135,8 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 - [x] Expose archive only with CONTENT_ARCHIVE and verify cross-organization 404 and permission-denied behavior.
 - [x] Run `identity accountability knowledge` against PostgreSQL: 61 tests passed, no skips; Django check and migration-drift check passed.
 - [x] Verify authenticated API session/CSRF behavior for content create/update/archive in PostgreSQL integration tests.
-- [ ] Perform a human browser smoke test for content create/update/archive when a frontend/browser deployment is available.
+- [x] In the React browser on 2026-10-11, create content and upload/publish a small PDF against disposable PostgreSQL/private storage.
+- [ ] Verify production ingress/body-size and request timeout settings support the 250 MiB per-file policy.
 - [x] Implement an injectable private storage abstraction with tenant/content/version UUID keys, streamed size/checksum metadata, protected open/delete methods, duplicate-write protection, and no public URL. The configured local private root is not exposed by static/media routes.
 - [x] Integrate private file upload and stored metadata with Content Version in M5; no public file URL or unprotected download endpoint is allowed.
 - [x] Replace the temporary nullable `current_version_id` UUID reference with the proper Content Version relationship in M5.
@@ -154,7 +155,7 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 - [x] Run `identity accountability knowledge knowledge.tests_uploads` against PostgreSQL: 93 tests passed, no skips; Django check, migration-drift check, and `git diff --check` passed.
 - [ ] Verify production ingress/body-size and request timeout settings support the 250 MiB per-file policy.
 - [x] Verify authenticated API session/CSRF behavior for content create/update/archive and version upload in PostgreSQL integration tests.
-- [ ] Perform a human browser smoke test for content/version APIs when a frontend/browser deployment is available.
+- [x] Perform a browser smoke test for content create, PDF version upload, and publication through React on disposable PostgreSQL (2026-10-11).
 
 ## M6: Programs + Content Assignment (Implemented; PostgreSQL Verified)
 
@@ -179,15 +180,16 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 - [x] Apply `knowledge.0006` for version-specific Content Access records; keep original files private and set rendered responses to `private, no-store`.
 - [x] Run `knowledge.tests_delivery` against PostgreSQL: 7 tests passed, including tenant/user scope, CSRF, revoked/inactive/stale access denial, page validation, rendering, and unsupported formats.
 - [x] Run `identity accountability knowledge` against PostgreSQL: 114 tests passed, no skips; Django check and migration-drift check passed.
-- [ ] Perform a human browser smoke test when the frontend/viewer is available.
+- [x] On 2026-10-11, use the React browser to open the assigned published PDF and verify rendered PNG delivery against disposable PostgreSQL.
 - [ ] Confirm production render CPU/memory and request-timeout settings for page rendering.
 
-## M9: Dynamic Watermarking (Implemented; Browser Smoke Pending)
+## M9: Dynamic Watermarking (Browser Presence Verified; Legibility Review Pending)
 
 - [x] Apply the approved masked email, organization name, UTC access timestamp, and content/version reference to each rendered page/image.
 - [x] Compose a low-opacity repeated diagonal watermark on the response only; leave private originals unchanged and add no watermark table.
 - [x] Verify rendered output contains the approved watermark content and differs from the unwatermarked output in PostgreSQL tests.
-- [ ] Manually verify watermark legibility/placement in a browser viewer when available.
+- [x] Verify the repeated diagonal watermark is present in the rendered browser preview.
+- [ ] Obtain product confirmation of watermark legibility/placement; it appeared low-contrast at the tested viewport.
 
 ## M10: Activity + Security + Audit (Implemented; PostgreSQL Verified)
 
@@ -203,7 +205,7 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 - [x] Run Django system check and `makemigrations --check --dry-run`; run `identity accountability knowledge`: 122 tests passed, no skips.
 - [x] Run `git diff --check`.
 - [ ] Add an explicitly approved audit-record visibility boundary before granting Management the audit permission.
-- [ ] Perform browser viewer/activity smoke testing when a frontend is available.
+- [x] Verify viewer and trusted Activity events through the React browser on disposable PostgreSQL (2026-10-11); visual watermark review remains tracked under M9.
 
 ## M11: Basic Analytics + Reports (Implemented; PostgreSQL Verified)
 
@@ -216,7 +218,7 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 - [x] Run `knowledge.tests_analytics` against PostgreSQL: 7 tests passed.
 - [x] Run Django system check and `makemigrations --check --dry-run`; run `identity accountability knowledge`: 129 tests passed, no skips.
 - [x] Run `git diff --check`.
-- [ ] Perform browser dashboard/report smoke testing when the frontend is available.
+- [x] On 2026-10-11, verify the Consumer dashboard/analytics show one successful view, the access report includes it, and Activity shows viewer-open/page-render events.
 
 ## M12: React Frontend (Implemented; Authenticated Browser Test Pending)
 
@@ -228,8 +230,11 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 - [x] Run `npm test` (5 frontend tests) and `npm run build`.
 - [x] Run `npm audit`; report 0 vulnerabilities after upgrading Vitest to 5.0.3.
 - [x] Start Vite and verify its root responds with HTTP 200 and renders the login page.
-- [ ] Start Django against the configured PostgreSQL database and manually verify login, session/CSRF behavior, content/version workflow, access, viewer, and reporting through the browser.
-- [ ] Complete M5/M8/M9 upload/viewer/watermark human browser smoke checks against the running backend.
+- [x] Against a fresh disposable PostgreSQL database, verify browser login/logout, CSRF, content create, PDF upload/publish, Program create/assignment, grant, Consumer viewer delivery, Activity/Audit, analytics, and access report.
+- [x] Verify Content Consumer content creation and audit reads return 403; Management content creation and audit reads return 403 while analytics reads return 200.
+- [x] Verify the Django raw-file media URL returns 404; the Vite development server's SPA fallback is not treated as a file response.
+- [x] Complete the supported M5/M8/M9 browser smoke steps; upload-size/production limits and watermark visual approval remain separate pending checks.
+- [ ] Add User/Role/Organization configuration management after the corresponding backend APIs and authorization/audit workflows exist.
 
 ## M13: Security Hardening (Backend Checks Added; Full Pass Pending)
 
@@ -240,13 +245,16 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 - [x] Verify Content Consumer cannot read audit records and organization security events cannot expose platform/other-tenant records.
 - [x] Run focused PostgreSQL accountability hardening checks: 17 tests passed across `accountability.tests_hardening`, `accountability.tests_m10`, and `knowledge.tests_analytics`.
 - [x] Run `npm audit` for the React frontend dependency tree: 0 vulnerabilities.
-- [ ] Complete the full guide security matrix, browser checks, deployment settings, and manual cross-tenant attempts after frontend implementation.
+- [x] Rerun the full PostgreSQL suite after M12: 134 tests passed with no skips; Django check and migration-drift check passed.
+- [x] Manually verify Consumer content-create/audit-read denial, Management content-create/audit-read denial and analytics access, and direct Django raw-file denial (404) in the browser flow.
+- [x] Verify Organization B content/program/access/report isolation in the PostgreSQL end-to-end scenario.
+- [ ] Complete production session/CSRF/CSP/ingress/timeout review and any additional manual role-matrix checks; this browser/development evidence is not production sign-off.
 
-## M14: Integration Testing (Backend Flow Verified; Browser Flow Pending)
+## M14: Integration Testing (Backend and Browser Flows Verified)
 
 - [x] Run a PostgreSQL session/CSRF API scenario covering content creation, version upload/publication, Program creation/assignment, grant, viewer access/delivery, activity/audit, analytics, and report behavior.
 - [x] Repeat cross-tenant resource/access attempts with Organization B and verify tenant isolation.
-- [ ] Integrate and manually verify the same workflow through the React frontend after M12.
+- [x] Integrate and manually verify the supported content-to-report workflow through React against a disposable PostgreSQL database, including real session/CSRF login and rendered protected viewer.
 
 ## If a Check Fails
 

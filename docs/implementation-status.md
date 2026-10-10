@@ -1,6 +1,6 @@
 # AEGIS Implementation Status
 
-**Last reviewed:** 2026-10-10
+**Last reviewed:** 2026-10-11
 **Source of truth:** [Implementation Guide](implementation-guide.md.md)
 
 This file records implementation progress and how to test the work that exists. A check passing on SQLite is not evidence that PostgreSQL integration has passed.
@@ -16,7 +16,7 @@ This file records implementation progress and how to test the work that exists. 
 - Django's system check passes.
 - A custom-format backup of the existing `aegis` database, `aegis-before-migration-repair-20261009.dump`, was created locally, its archive listing verified, and restored into a disposable database before repair.
 - The existing `aegis` database was repaired from the verified backup: the current identity migration is recorded, the login column and missing permission/group join tables match the current model, and the tenant-email constraint uses its current name.
-- All current migrations, including the M3 RBAC migration, apply on `aegis`; `showmigrations` reports them applied and `makemigrations --check --dry-run` reports no changes.
+- M3-M10 migrations, including the current RBAC, Program, Access Grant, Content Access, and Activity schema, apply on `aegis`; `showmigrations` reports them applied and `makemigrations --check --dry-run` reports no changes. M11-M14 add no backend migrations.
 - Temporary validation and repair-clone databases were removed after successful verification.
 - Node.js 24.20.0 and npm 11.19.0 were installed for the React frontend. The frontend package manifest and lockfile are present.
 
@@ -103,7 +103,7 @@ Added an injectable `StorageService` with a private local filesystem adapter, in
 
 PostgreSQL verification: `accountability.0004_auditrecord` applied to `aegis`; Django check and migration-drift check passed; `identity accountability knowledge` passed all 61 tests without skips. The storage-service test module also passed all 6 tests. Tests cover organization scoping, Content Consumer scope/denial, CRUD metadata, search/filter validation, archive authorization and tenant isolation, audit contents, repeat-archive conflict, rollback on audit-insert failure, storage key/metadata, no public URL, traversal rejection, and duplicate-write protection.
 
-M4 implementation is in place. The broader audit history/query features and additional audit actions remain in M10. Authenticated API session/CSRF behavior for content create/update/archive is covered by PostgreSQL integration tests; a human browser smoke test remains pending because no frontend/browser deployment is configured here.
+M4 implementation is in place. The broader audit history/query features and additional audit actions remain in M10. Authenticated API session/CSRF behavior for content create/update/archive is covered by PostgreSQL integration tests. On 2026-10-11 the frontend browser flow created content and uploaded/published a PDF against a disposable PostgreSQL database.
 
 ## Milestone 5: Content Versioning (Implementation Complete; Operational Checks Pending)
 
@@ -113,7 +113,7 @@ Added tenant- and permission-checked version upload/list/detail/publish/archive 
 
 PostgreSQL verification: all M5 migrations are applied; the combined `identity accountability knowledge knowledge.tests_uploads` suite passed all 93 tests with no skips. Django check, migration-drift check, and `git diff --check` passed. Tests cover the approved per-file limits, MIME/signature checks, session/CSRF behavior, upload permissions and tenant isolation, private storage metadata, storage cleanup after database failure, publication, non-current archiving, current-version conflict, audit rollback, and historical immutability.
 
-The user approved the initial policy: PDF 50 MiB, PPTX 50 MiB, JPG/JPEG/PNG/WEBP 10 MiB, and MP4 250 MiB per file. Template uploads and external-link content remain deferred without removing them from broader product scope. No public file URL or download endpoint was added. API session/CSRF behavior for file upload is covered by the historical PostgreSQL integration tests; a human browser smoke test remains pending because no frontend/browser deployment is configured here. Deployment-specific request-body and timeout limits must support the approved 250 MiB maximum before production rollout. Those environment-dependent checks remain open and are not represented as passed.
+The user approved the initial policy: PDF 50 MiB, PPTX 50 MiB, JPG/JPEG/PNG/WEBP 10 MiB, and MP4 250 MiB per file. Template uploads and external-link content remain deferred without removing them from broader product scope. No public file URL or download endpoint was added. API session/CSRF behavior for file upload is covered by PostgreSQL integration tests, and a PDF upload/publish was manually verified in the browser on 2026-10-11 using disposable PostgreSQL/private storage. Deployment-specific request-body and timeout limits must support the approved 250 MiB maximum before production rollout. Those environment-dependent checks remain open and are not represented as passed.
 
 M0 still needs a local `backend/.env` and the clean-worktree/baseline checkpoint criteria.
 
@@ -131,19 +131,23 @@ Added tenant-scoped Program Access Grants with active, revoked, and expired stat
 
 **PostgreSQL integration verification (2026-10-10):** Applied `accountability.0007` and `knowledge.0005` to the configured `aegis` database. The focused `knowledge.tests_access_grants` run passed all 6 tests. After adapting the M6 consumer-view test to provide the now-required grant, `identity accountability knowledge` passed all 107 tests with no skips. Django check and migration-drift check passed. These results are PostgreSQL integration evidence, not SQLite-only checks.
 
-## Milestone 8: Secure Content Delivery (Implemented; Browser Smoke Pending)
+## Milestone 8: Secure Content Delivery (Implemented; Browser Smoke Verified; Operational Checks Pending)
 
 Implemented session-authenticated access creation and rendered delivery. Starting access creates a tenant/user/program/content/version-bound Content Access record only when the user has `SECURE_DELIVERY`, an active unexpired Program Access Grant, an active Program, an assignment, and published Content with its current published version. Each delivery request re-checks the authenticated session, the user-bound access record, grant expiry/revocation, Program state, assignment, and current version; a different user, tenant, revoked grant, inactive Program, removed assignment, or stale version receives not-found.
 
 PDF is rendered one requested page at a time to PNG. JPG/JPEG/PNG/WEBP are normalized to PNG, with metadata excluded from the representation. Raster output is capped at 2400 pixels on the longest edge and image source dimensions are bounded. Original files remain in private storage; responses are inline PNG with `private, no-store` and `nosniff` headers. PPTX and MP4 delivery are deferred and return 415. No short-lived token system, public file URL, or raw source delivery was added. M9 adds the approved dynamic watermark to rendered responses; rendering does not prevent screenshots or saving the rendered representation.
 
-**PostgreSQL integration verification (2026-10-10):** Applied `knowledge.0006`. The focused `knowledge.tests_delivery` suite passed 7 tests, including watermark content and rendered pixel output. The full `identity accountability knowledge` suite passed all 114 tests with no skips; Django system check and migration-drift check passed. Tests exercise rendered PDF pages/images, session/CSRF, access/grant/tenant/program/assignment/version checks, revocation and stale-version denial, page validation, private no-store headers, and deferred formats. A human browser smoke test remains pending because no frontend is configured.
+**PostgreSQL integration verification (2026-10-10):** Applied `knowledge.0006`. The focused `knowledge.tests_delivery` suite passed 7 tests, including watermark content and rendered pixel output. The full `identity accountability knowledge` suite passed all 114 tests with no skips; Django system check and migration-drift check passed. Tests exercise rendered PDF pages/images, session/CSRF, access/grant/tenant/program/assignment/version checks, revocation and stale-version denial, page validation, private no-store headers, and deferred formats. At that time, browser smoke was pending; the subsequent 2026-10-11 browser verification is recorded below.
 
-## Milestone 9: Dynamic Watermarking (Implemented; Browser Smoke Pending)
+**Browser verification (2026-10-11):** Using a disposable PostgreSQL database and private upload directory, a Content Consumer logged in through the React app, opened a published one-page PDF, and received a rendered 960×640 PNG. The Django server returned 404 for a direct `/media/...` raw-file request. Render and watermark CPU/memory/time limits remain deployment-specific and unverified.
+
+## Milestone 9: Dynamic Watermarking (Implemented; Browser Presence Verified; Legibility Review Pending)
 
 Applied a low-opacity repeated diagonal watermark to every rendered PNG page/image response at delivery time. The approved fields are masked email (first local-part character plus `***`, with domain retained), organization name, UTC access timestamp, and content UUID prefix/version number. The watermark is composed on the rendered representation only; private originals are unchanged and there is no permanent watermark table. Unauthorized requests cannot invoke rendering or watermark generation.
 
 M9 adds no schema changes. PostgreSQL delivery tests verify the watermark fields and that output pixels differ from the unwatermarked page; the complete 114-test suite passed on PostgreSQL. Browser legibility and placement remain pending manual viewer smoke testing.
+
+The 2026-10-11 browser screenshot showed the repeated diagonal watermark on the rendered PDF. At the tested viewport it appeared low-contrast; confirm acceptable legibility/placement with product stakeholders before closing this visual review.
 
 ## Milestone 10: Activity + Security + Audit (Implemented; PostgreSQL Verified)
 
@@ -151,7 +155,7 @@ Added organization-owned, allowlisted `ActivityEvent` records for successful vie
 
 Expanded audit actions for Program, assignment, Program Access Grant, user-role, and permission changes. RBAC role/permission mutation services now persist their `USER_ROLE_CHANGED` and `PERMISSION_CHANGED` records in the same transaction as the mutation. Existing content, version, Program, assignment, and grant actions remain transactional. Management does not receive audit or security-event permissions by default; no policy broadening was made.
 
-**PostgreSQL integration verification (2026-10-10):** Applied `accountability.0008` to the configured `aegis` database. Focused M10/RBAC/delivery tests passed **25 tests**. Django system check passed, `makemigrations --check --dry-run` found no drift, and `identity accountability knowledge` passed **122 tests with no skips** against PostgreSQL. `git diff --check` passed. These are PostgreSQL results; SQLite results are not substituted. Browser viewer/manual legibility and deployment resource/time-limit checks remain pending from M8/M9, as do M5 upload ingress/timeout checks.
+**PostgreSQL integration verification (2026-10-10):** Applied `accountability.0008` to the configured `aegis` database. Focused M10/RBAC/delivery tests passed **25 tests**. Django system check passed, `makemigrations --check --dry-run` found no drift, and `identity accountability knowledge` passed **122 tests with no skips** against PostgreSQL. `git diff --check` passed. These are PostgreSQL results; SQLite results are not substituted. The 2026-10-11 browser verification covered viewer/activity behavior; watermark legibility and deployment resource/time-limit checks remain open from M8/M9, as do M5 upload ingress/timeout checks.
 
 ## Milestone 11: Basic Analytics + Reports (Implemented; PostgreSQL Verified)
 
@@ -161,19 +165,21 @@ The approved view definition is one successful Content Access record per viewer 
 
 **PostgreSQL integration verification (2026-10-10):** Focused `knowledge.tests_analytics` passed **7 tests**. No schema changes were required. Django system check passed, `makemigrations --check --dry-run` found no drift, and the full `identity accountability knowledge` suite passed **134 tests with no skips** against PostgreSQL after adding M13/M14 coverage. `git diff --check` passed. This is PostgreSQL evidence, not a SQLite substitute.
 
-## Milestone 12: React Frontend (Implemented; Browser/API Smoke Pending)
+**Browser verification (2026-10-11):** On disposable PostgreSQL data, the Content Consumer dashboard and analytics showed one view and one active user, the access report displayed the successful open, and Activity listed the trusted `VIEWER_OPENED` and `VIEWER_PAGE_RENDERED` events.
+
+## Milestone 12: React Frontend (Implemented; Browser/API Smoke Verified)
 
 Added a React/Vite application consuming the existing `/api/v1/` session-authenticated APIs. The API client includes browser credentials, obtains and sends Django CSRF tokens on unsafe requests, refreshes the token after login, preserves pagination metadata, and surfaces API errors. Frontend permission checks only tailor navigation and controls; authorization and tenant isolation remain server-enforced.
 
 Implemented organization login, workspace overview, supported content and version workflows (create, upload draft, publish/archive), Programs and assignments, Program Access Grant create/revoke and lookup by user UUID, page-by-page protected viewer delivery, read-only Activity/Audit/Security Event lists, analytics, and access reports. The Administration page explicitly reports that user/role/organization-management APIs are not currently available; no frontend-only or simulated management behavior was added.
 
-Node.js **24.20.0** and npm **11.19.0** are available; dependencies are recorded in `frontend/package-lock.json`. Frontend verification: `npm test` passed **5 tests**; `npm run build` passed; `npm audit` reported **0 vulnerabilities** after upgrading the Vitest test runner to patched version 5.0.3. Vite served the login screen and returned HTTP 200. Authenticated browser/API smoke testing is still pending: the Django API was not running at `127.0.0.1:8000` during browser verification. Run the backend against the configured PostgreSQL database before validating login and the full browser workflow. These frontend checks do not replace PostgreSQL integration tests.
+Node.js **24.20.0** and npm **11.19.0** are available; dependencies are recorded in `frontend/package-lock.json`. Frontend verification: `npm test` passed **5 tests**; `npm run build` passed; `npm audit` reported **0 vulnerabilities** after upgrading the Vitest test runner to patched version 5.0.3. On 2026-10-11 Vite and Django both returned HTTP 200. Against a freshly migrated disposable PostgreSQL database, the browser verified CSRF-protected login/logout, content creation, PDF draft upload/publication, Program creation/assignment, grant creation, Content Consumer access and rendered delivery, read-only Activity/Audit, analytics, and access report. Browser probes confirmed Content Consumer content creation returns 403, Management content creation and audit reads return 403 while analytics returns 200, and the Django raw-file path returns 404. The existing PostgreSQL end-to-end test separately covers Organization B isolation. Frontend checks and browser smoke do not replace the PostgreSQL integration suite.
 
 ## Pending Milestones
 
-- **M5 operational checks:** human browser smoke test and production ingress/body-size/timeout confirmation for 250 MiB uploads.
-- **M12 browser integration:** React UI and frontend tests/build are implemented; authenticated browser smoke testing against the Django/PostgreSQL API remains open. User, role, and organization configuration controls also await backend APIs.
-- **M13 Security Hardening:** accountability API input/tenant checks and append-only audit protections have focused PostgreSQL coverage; the full milestone security pass remains pending the frontend and the documented manual/security scenarios.
-- **M14 Integration Testing:** one PostgreSQL end-to-end scenario uses real login sessions and CSRF-protected requests to cover content-to-delivery-to-analytics/report behavior and Organization B isolation. Frontend/browser integration remains pending M12.
+- **M5/M8/M9 operational checks:** browser smoke now covers PDF upload/publish and rendered/watermarked delivery. Production 250 MiB ingress/timeouts, viewer resource limits, and acceptable watermark legibility remain unverified.
+- **M12 remaining scope:** frontend implementation, automated tests/build/audit, and authenticated disposable-PostgreSQL browser flow are verified. User, role, and organization configuration management still awaits the corresponding backend APIs.
+- **M13 Security Hardening:** complete the remaining deployment/session configuration review, product-approved audit visibility boundary, and any further role-matrix tests. Automated PostgreSQL tests plus browser probes verified selected cross-tenant, permission, audit, CSRF, and raw-file controls; this is not a production security sign-off.
+- **M14 Integration Testing:** backend PostgreSQL end-to-end test covers Organization B isolation, and the equivalent supported workflow was manually exercised through the React browser against disposable PostgreSQL data. Production/manual multi-organization acceptance remains environment-specific.
 
 Content Consumer list/detail, Program, assignment, and version scope now enforces Program Access Grants. Keep Management audit access disabled until its precise record boundary is approved. M5 browser and production ingress/body-size/timeout checks remain environment-dependent.

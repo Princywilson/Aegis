@@ -199,6 +199,8 @@ class AuditRecord(models.Model):
         CONTENT_UNASSIGNED = "CONTENT_UNASSIGNED", "Content unassigned"
         USER_ROLE_CHANGED = "USER_ROLE_CHANGED", "User role changed"
         PERMISSION_CHANGED = "PERMISSION_CHANGED", "Permission changed"
+        USER_CREATED = "USER_CREATED", "User created"
+        USER_UPDATED = "USER_UPDATED", "User updated"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
@@ -253,6 +255,8 @@ class AuditRecord(models.Model):
                         "CONTENT_UNASSIGNED",
                         "USER_ROLE_CHANGED",
                         "PERMISSION_CHANGED",
+                        "USER_CREATED",
+                        "USER_UPDATED",
                     ]
                 ),
                 name="audit_action_valid",

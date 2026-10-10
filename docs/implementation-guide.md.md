@@ -1904,11 +1904,14 @@ The backend integration test should exercise the complete available
 content-to-delivery workflow through the API, including content creation,
 version upload/publication, Program assignment, access grant, viewer delivery,
 activity/audit records, analytics, reports, and Organization B isolation.
-The React frontend is implemented, but authenticated browser verification
-requires the Django API to be running against the configured PostgreSQL
-database. Until that browser flow is completed, this validates the backend
-end-to-end flow only; it does not count as frontend/browser or manual
-verification.
+On 2026-10-11 the supported content-to-report workflow was also manually
+exercised through the React browser against a freshly migrated, disposable
+PostgreSQL database: session/CSRF login, content and version publication,
+Program assignment and grant, Content Consumer delivery, Activity/Audit,
+analytics, and access reporting. Organization B isolation remains covered by
+the backend end-to-end test. This browser smoke is separate from the
+134-test PostgreSQL regression suite and is not a production deployment or
+ingress/resource-limit sign-off.
 
 ---
 

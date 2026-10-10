@@ -76,6 +76,10 @@ function ErrorMessage({ error }) {
 function useResource(path, refreshKey = 0) {
   const [state, setState] = useState({ data: null, loading: true, error: "" });
   const reload = useCallback(async () => {
+    if (!path) {
+      setState({ data: [], loading: false, error: "" });
+      return;
+    }
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
       const data = await apiRequest(path);
@@ -261,7 +265,7 @@ function App() {
       <main className="main-content">
         <Routes>
           <Route path="/" element={<Dashboard user={auth.user} />} />
-          <Route path="/administration" element={<Administration />} />
+          <Route path="/administration" element={<Administration user={auth.user} />} />
           <Route path="/content" element={<ContentPage user={auth.user} />} />
           <Route path="/programs" element={<ProgramsPage user={auth.user} />} />
           <Route path="/access" element={<AccessPage user={auth.user} />} />
@@ -367,23 +371,220 @@ function Metric({ label, value }) {
   );
 }
 
-function Administration() {
+function Administration({ user }) {
+  const canViewUsers = user.permissions.includes("USER_VIEW");
+  const canCreateUsers = user.permissions.includes("USER_CREATE");
+  const canUpdateUsers = user.permissions.includes("USER_UPDATE");
+  const canDeactivateUsers = user.permissions.includes("USER_DEACTIVATE");
+  const canManageRoles = user.permissions.includes("ROLE_MANAGE");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [search, setSearch] = useState("");
+  const [form, setForm] = useState({ name: "", email: "" });
+  const [selectedRoles, setSelectedRoles] = useState([]);
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const userParams = new URLSearchParams({ page_size: "100" });
+  if (search.trim()) userParams.set("search", search.trim());
+  const users = useResource(
+    canViewUsers ? `/users/?${userParams}` : null,
+    refreshKey,
+  );
+  const roles = useResource(canManageRoles ? "/roles/" : null, refreshKey);
+  const permissions = useResource(
+    canManageRoles ? "/permissions/" : null,
+    refreshKey,
+  );
+  const userItems = users.data?.results || users.data || [];
+  const roleItems = roles.data?.results || roles.data || [];
+  const permissionItems = permissions.data?.results || permissions.data || [];
+
+  async function createUser(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setTemporaryPassword("");
+    try {
+      const created = await apiRequest("/users/", {
+        method: "POST",
+        body: {
+          ...form,
+          role_ids: selectedRoles,
+        },
+      });
+      setTemporaryPassword(created.temporary_password);
+      setForm({ name: "", email: "" });
+      setSelectedRoles([]);
+      setRefreshKey((key) => key + 1);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateStatus(item) {
+    const status = item.status === "active" ? "inactive" : "active";
+    setBusy(true);
+    setError("");
+    try {
+      await apiRequest(`/users/${item.id}/`, {
+        method: "PATCH",
+        body: { status },
+      });
+      setRefreshKey((key) => key + 1);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
         eyebrow="Administration"
-        title="Organization settings"
-        description="Manage people, permissions, and organization configuration."
+        title="People and access"
+        description="Manage organization users and review the seeded role and permission catalogue."
       />
-      <section className="panel">
-        <h2>Administration APIs are not available yet</h2>
-        <p className="muted">
-          The current backend exposes authentication and permission data for the
-          signed-in user, but does not provide user, role, or organization
-          configuration management endpoints. These controls are intentionally
-          unavailable until their backend authorization and audit workflows are implemented.
-        </p>
-      </section>
+      <ErrorMessage error={error || users.error || roles.error || permissions.error} />
+      {temporaryPassword && (
+        <section className="panel notice success" aria-live="polite">
+          <h2>Temporary password — shown once</h2>
+          <p>Share this password with the new user through an approved secure channel.</p>
+          <code>{temporaryPassword}</code>
+        </section>
+      )}
+      {canViewUsers ? (
+        <section className="panel">
+          <div className="section-heading">
+            <div>
+              <h2>Organization users</h2>
+              <p className="muted">User data and filters are scoped to this organization.</p>
+            </div>
+            <label>
+              Search
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Name or email"
+              />
+            </label>
+          </div>
+          {users.loading ? (
+            <p className="muted">Loading users…</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Name</th><th>Email</th><th>Status</th><th>Roles</th><th>Action</th></tr>
+                </thead>
+                <tbody>
+                  {userItems.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.name || "—"}</td>
+                      <td>{item.email}</td>
+                      <td>{item.status}</td>
+                      <td>{item.roles.join(", ") || "—"}</td>
+                      <td>
+                        {canUpdateUsers && (
+                          <button
+                            className="button secondary"
+                            type="button"
+                            disabled={busy || (item.status === "active" && !canDeactivateUsers)}
+                            onClick={() => updateStatus(item)}
+                          >
+                            {item.status === "active" ? "Deactivate" : "Activate"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {!userItems.length && (
+                    <tr><td colSpan="5" className="muted">No users found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="panel">
+          <h2>User directory unavailable</h2>
+          <p className="muted">Your role does not include permission to view organization users.</p>
+        </section>
+      )}
+      {canCreateUsers && (
+        <section className="panel">
+          <h2>Create user</h2>
+          <form className="form-grid" onSubmit={createUser}>
+            <label>
+              Full name
+              <input
+                required
+                maxLength="301"
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+              />
+            </label>
+            <label>
+              Email
+              <input
+                required
+                type="email"
+                value={form.email}
+                onChange={(event) => setForm({ ...form, email: event.target.value })}
+              />
+            </label>
+            {canManageRoles && (
+              <fieldset>
+                <legend>Roles</legend>
+                {roleItems.map((role) => (
+                  <label key={role.id} className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoles.includes(role.id)}
+                      onChange={(event) => setSelectedRoles((current) =>
+                        event.target.checked
+                          ? [...current, role.id]
+                          : current.filter((id) => id !== role.id))}
+                    />
+                    {role.name}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <button className="button primary" type="submit" disabled={busy}>
+              {busy ? "Creating…" : "Create user"}
+            </button>
+          </form>
+        </section>
+      )}
+      {canManageRoles && (
+        <section className="panel">
+          <h2>Roles and permissions</h2>
+          <div className="card-grid">
+            {roleItems.map((role) => (
+              <article className="metric-card" key={role.id}>
+                <strong>{role.name}</strong>
+                <span>{role.code}</span>
+              </article>
+            ))}
+          </div>
+          <details>
+            <summary>Permission catalogue ({permissionItems.length})</summary>
+            <ul className="permission-list">
+              {permissionItems.map((permission) => (
+                <li key={permission.code}>
+                  <code>{permission.code}</code> — {permission.name}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
+      )}
+      <p className="muted">Organization profile/configuration editing is not specified by the current API contract.</p>
     </>
   );
 }
@@ -652,7 +853,7 @@ function ProgramsPage({ user }) {
             <h3>Assigned content</h3>
             <div className="table-wrap"><table><thead><tr><th>Content</th><th>Status</th><th /></tr></thead><tbody>
               {assigned.map((item) => <tr key={item.content_id}><td>{item.content_title}</td><td><StatusBadge value={item.content_status} /></td><td>{user.permissions.includes("ASSIGNMENT_MANAGE") && <button className="text-button danger-text" onClick={() => removeAssignment(item.content_id)}>Remove</button>}</td></tr>)}
-              {!assigned.length && <tr><td colSpan="3" className="empty-cell">No content assigned.</td></tr>}
+              {!assigned.length && <tr key="no-assignments"><td colSpan="3" className="empty-cell">No content assigned.</td></tr>}
             </tbody></table></div>
             {user.permissions.includes("ASSIGNMENT_MANAGE") && (
               <form className="inline-form assign-form" onSubmit={addAssignment}>
