@@ -26,3 +26,7 @@ __pycache__/
 .pytest_cache/
 .Python
 backend/private_storage/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/

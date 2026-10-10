@@ -633,7 +633,7 @@ M5  Content Versioning
  ↓
 M6  Programs + Assignments
  ↓
-M7  Training Access
+M7  Program Access Grants
  ↓
 M8  Secure Delivery
  ↓
@@ -1237,6 +1237,10 @@ tenant isolation
 
 Create the organizational delivery context.
 
+The approved domain-neutral terminology is **Program** and **Program-Content
+Assignment**. A content assignment relates a Program to Content; it does not
+grant a user access or authorize delivery.
+
 ## Program
 
 Conceptually:
@@ -1271,6 +1275,15 @@ remove assignment
 list program content
 ```
 
+### Inactive Program behavior
+
+- Deactivation preserves all existing Program-Content assignments.
+- New content assignments are rejected while the Program is inactive.
+- Reactivation permits new assignments again under the normal validation and
+  authorization rules.
+- Deactivation does not itself grant or revoke a user's access; M7 authorization
+  remains a separate decision and enforcement step.
+
 ## Rules
 
 Prevent:
@@ -1281,20 +1294,25 @@ Content from Organization A
 Program from Organization B
 ```
 
+Assignments must be unique for a Program and Content pair. Removing an
+assignment removes only that relationship and never deletes Content.
+
 ## Tests
 
 ```text
 program creation
+program update
+program activation/deactivation
 content assignment
 duplicate assignment prevention
 tenant isolation
 cross-organization rejection
-inactive program behavior
+inactive program assignment preservation and rejection
 ```
 
 ---
 
-# 18. Milestone 7 — Training Access
+# 18. Milestone 7 — Program Access Grants
 
 ## Objective
 
@@ -1303,7 +1321,7 @@ Separate authorization from actual content usage.
 The distinction is critical:
 
 ```text
-Training Access
+Program Access Grant
 = authorization
 
 Content Access
@@ -1317,7 +1335,7 @@ User
  ↓
 Program
  ↓
-Training Access
+Program Access Grant
  ↓
 Assignment exists?
  ↓
@@ -1337,7 +1355,7 @@ Organization valid?
     ↓ yes
 Permission valid?
     ↓ yes
-Training Access active?
+Program Access Grant active?
     ↓ yes
 Assignment exists?
     ↓ yes
@@ -1352,13 +1370,22 @@ Otherwise:
 DENY
 ```
 
+## Grant lifecycle
+
+- A grant belongs to one organization, active Content Consumer, and Program in that same organization.
+- A grant may have an optional future `expires_at`; an expired grant does not authorize access.
+- Revocation preserves the grant row and records the revoking actor and time. Regranting after revocation or expiry creates a new historical row.
+- At most one grant with `ACTIVE` status may exist for an organization/user/program at a time.
+- An inactive Program denies access without changing an active grant; reactivation restores eligibility only when that grant is unexpired and all other authorization checks pass.
+- Grant and revoke operations require their explicit permissions and record audit events transactionally.
+
 ## Cross-tenant security
 
 Where required by the API/security design, do not reveal whether another organization's resource exists. Use safe not-found behavior.
 
 ## Tests
 
-Build explicit authorization tests before building the viewer.
+Test grant, duplicate denial, revocation, regrant history, expiry, inactive Program preservation, permission boundaries, tenant-safe denial, assignment scope, and current published-version scope before building the viewer.
 
 ---
 
@@ -1381,7 +1408,7 @@ Tenant resolution
   ↓
 Permission check
   ↓
-Training Access check
+Program Access Grant check
   ↓
 Assignment check
   ↓
@@ -1406,19 +1433,25 @@ for a protected source file.
 
 ## MVP implementation strategy
 
-Start with the simplest secure mechanism that fits the approved architecture.
+**Approved implementation decision (2026-10-10):** Use a render-based viewer. Keep all source files in private storage. Render PDF one page per request to PNG and normalize JPG/JPEG/PNG/WEBP images to PNG. Defer PPTX conversion and MP4 streaming until their processing requirements are approved; those formats return an unsupported-format response from the viewer. Use Pillow and pypdfium2 for rendering.
 
-Possible implementation sequence:
+Start access with the authenticated Django session and record the accessed
+Content Version. Each page/image request must re-check that same session and
+the current authorization; do not add a separate short-lived delivery-token
+system for the MVP. The access ID is a user-bound record reference, not a bearer credential.
+
+Implementation sequence:
 
 ```text
-1. Backend authorizes access
-2. Backend opens private file
-3. Backend generates/streams a protected representation
-4. Browser renders it
-5. Source storage path remains private
+1. Create Content Access after checking the active grant, Program, assignment, and published current version
+2. For every page request, re-check the session, permission, Content Access owner, grant expiry/revocation, Program state, assignment, and current version
+3. Open the private source in the backend and render only the requested PDF page or normalized image
+4. Return an inline PNG with private no-store caching and no source URL/path
+5. Keep the original file private
 ```
 
-The exact presentation mechanism should be selected based on the supported content format and the approved API design.
+Limit rasterized output to 2400 pixels on its longest edge. Reject invalid or
+excessively large image inputs. The viewer does not render PPTX or MP4.
 
 Do not pretend browser viewing makes copying technically impossible.
 
@@ -1436,6 +1469,8 @@ wrong organization
 wrong version
 missing content
 private storage inaccessible directly
+session and CSRF behavior
+PPTX/MP4 unsupported response
 ```
 
 ---
@@ -1448,7 +1483,14 @@ Make delivered content traceable to the accessing user/context.
 
 ## Watermark information
 
-Generate at delivery time using information such as:
+**Approved privacy decision (2026-10-10):** Each rendered page displays the
+masked user email, organization name, UTC access timestamp, and Content/version
+reference. Mask email by preserving its first local-part character and domain
+(for example, `p***@example.com`). Use the access-record timestamp and reference
+the content UUID prefix plus version number. Render a low-opacity repeated
+diagonal watermark onto each PNG response; do not modify the private original.
+
+Generate at delivery time using the approved identity/context fields:
 
 ```text
 user identity
@@ -1487,6 +1529,7 @@ Verify:
 ```text
 watermark generated
 watermark corresponds to current user
+watermark uses only the approved masked identity and context fields
 watermark changes appropriately per access context
 unauthorized users never reach watermark generation
 ```
@@ -1501,27 +1544,26 @@ Make AEGIS accountable.
 
 ## Activity events
 
-Capture meaningful viewer/user activity.
-
-Example allowlisted events:
+Capture meaningful viewer activity. For the MVP, record only the currently
+implemented successful viewer events:
 
 ```text
 VIEWER_OPENED
-VIEWER_CLOSED
-SLIDE_NEXT
-SLIDE_PREVIOUS
-SLIDE_JUMP
-PAUSED
-RESUMED
+VIEWER_PAGE_RENDERED
 ```
 
-Only implement events actually required by the MVP.
-
-Client activity must not become a generic arbitrary event injection API.
+Both events are generated by trusted delivery workflows and are linked to the
+organization, user, content, version, Program, and Content Access context.
+Activity listing is read-only. Do not add a client-controlled generic event
+ingestion API or pretend that browser close/navigation can be reliably
+observed.
 
 ## Security events
 
-Examples:
+Security events are generated by trusted backend logic. The existing
+authentication events are retained; protected content denial records
+`ACCESS_DENIED`. Organization-level security-event queries must exclude
+platform-level rows whose organization is null.
 
 ```text
 LOGIN_SUCCESS
@@ -1535,24 +1577,34 @@ Security events are generated by trusted backend logic.
 
 ## Audit records
 
-Examples:
+Audited changes use the following actions:
 
 ```text
-USER_CREATED
-USER_DEACTIVATED
 CONTENT_CREATED
 CONTENT_UPDATED
 CONTENT_ARCHIVED
-VERSION_CREATED
-VERSION_PUBLISHED
+CONTENT_VERSION_CREATED
+CONTENT_VERSION_PUBLISHED
+CONTENT_VERSION_ARCHIVED
 PROGRAM_CREATED
-ACCESS_GRANTED
-ACCESS_REVOKED
+PROGRAM_UPDATED
+PROGRAM_ACTIVATED
+PROGRAM_DEACTIVATED
+CONTENT_ASSIGNED
+CONTENT_UNASSIGNED
+PROGRAM_ACCESS_GRANTED
+PROGRAM_ACCESS_REVOKED
+USER_ROLE_CHANGED
+PERMISSION_CHANGED
 ```
 
-Audit records are append-only.
+Audit records are append-only and the audit API is read-only. Important state
+changes and their audit rows must be persisted in the same transaction.
 
-Do not provide arbitrary update/delete APIs for audit history.
+`ACTIVITY_VIEW_OWN` limits Content Consumer activity to the authenticated
+user. `ACTIVITY_VIEW_ORGANIZATION` allows organization-scoped activity.
+`AUDIT_VIEW_ORGANIZATION` and `SECURITY_EVENT_VIEW_ORGANIZATION` remain
+separate permissions; Management receives neither by default.
 
 ## Tests
 
@@ -1581,6 +1633,18 @@ recent activity
 version usage
 ```
 
+For this implementation, one successful viewer open is one `ContentAccess`
+record and therefore one content view. `VIEWER_PAGE_RENDERED` is page-level
+activity and must not add extra content views. Active users are distinct users
+with a successful Content Access in the selected reporting period. Viewer
+sessions are represented by those same Content Access records. Do not report
+average session duration until a reliable session-end signal exists.
+
+Content Consumer analytics and reports are limited to the user's own access
+history for content in an active Program with an active grant, assignment,
+published Content, and a published current version. Organization-level
+analytics/reports are restricted to the authenticated user's organization.
+
 ## Reports
 
 At minimum:
@@ -1592,6 +1656,12 @@ Access Report
 Version History Report
 Audit Report
 ```
+
+The existing Activity, Content Version, and Audit list APIs provide the User
+Activity, Version History, and Audit reports with their existing permissions.
+M11 adds content analytics and a paginated Access Report. Audit visibility
+remains governed by `AUDIT_VIEW_ORGANIZATION`; Management does not gain that
+permission as part of the report milestone.
 
 ## Design principle
 
@@ -1714,6 +1784,18 @@ Reports
 
 This mirrors the backend dependency chain.
 
+## Current frontend implementation notes
+
+The React application is in `frontend/` and uses Vite. Start Django against the configured PostgreSQL database at `127.0.0.1:8000`, then run these commands from the repository root:
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+The Vite development server proxies `/api` to Django. The frontend sends session cookies and CSRF headers and treats backend permissions as authoritative. User, role, and organization-configuration management remains unavailable until the corresponding backend APIs exist; the UI must not simulate those operations.
+
 ---
 
 # 25. Milestone 13 — Security Hardening
@@ -1746,6 +1828,11 @@ direct object ID manipulation
 ```
 
 Every attempt should produce the correct result.
+
+Backend hardening checks must also verify that accountability endpoints reject
+client-selected tenant filters, require timezone-aware date filters, do not
+accept client-created activity/security events, and prevent audit records from
+being mutated through model instances or ordinary ORM update/delete queries.
 
 ## Tenant isolation
 
@@ -1812,6 +1899,16 @@ Create an end-to-end test scenario.
 ```
 
 Then repeat with Organization B and verify isolation.
+
+The backend integration test should exercise the complete available
+content-to-delivery workflow through the API, including content creation,
+version upload/publication, Program assignment, access grant, viewer delivery,
+activity/audit records, analytics, reports, and Organization B isolation.
+The React frontend is implemented, but authenticated browser verification
+requires the Django API to be running against the configured PostgreSQL
+database. Until that browser flow is completed, this validates the backend
+end-to-end flow only; it does not count as frontend/browser or manual
+verification.
 
 ---
 
@@ -2268,7 +2365,7 @@ Archive
 
 ```text
 M6 Programs
-M7 Training Access
+M7 Program Access Grants
 ```
 
 Target:

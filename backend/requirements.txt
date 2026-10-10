@@ -3,3 +3,5 @@ djangorestframework==3.18.1
 psycopg[binary]==3.3.6
 django-cors-headers==4.9.0
 python-dotenv==1.2.4
+Pillow==12.3.0
+pypdfium2==5.14.0

@@ -413,11 +413,11 @@ The assignment relationship provides a controlled way of determining which conte
 
 ---
 
-# 11. Training Access
+# 11. Program Access Grant
 
 ## Purpose
 
-Represents the controlled authorization for a user to access training content within a particular context.
+Represents the controlled authorization for a user to access content assigned to a particular Program.
 
 This is a key AEGIS concept.
 
@@ -440,6 +440,14 @@ User
                     │
                     └── Content
 ```
+
+An active grant does not permit access while its Program is inactive. Program
+deactivation preserves the grant; reactivation restores eligibility only when
+the grant and all other authorization checks remain valid.
+
+Grants may expire at an optional timestamp. Revocation records its actor and
+time without deleting the grant. A later grant creates a separate historical
+record; no more than one active grant exists for a user and Program at a time.
 
 This allows AEGIS to answer questions such as:
 
@@ -486,6 +494,11 @@ User
 ```
 
 Content Access contributes to the activity history of AEGIS.
+
+For protected delivery, an access record is created for the exact published
+version selected. Each rendered page request revalidates the authenticated
+user, active Program Access Grant, Program, assignment, and current version.
+The record identifier is not a separate access token.
 
 ---
 

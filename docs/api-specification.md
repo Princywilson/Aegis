@@ -1378,7 +1378,7 @@ Historical records must remain identifiable even after archival.
 ## 31.1 List Programs
 
 ```
-GET /api/v1/programs
+GET /api/v1/programs/
 ```
 
 ### Authentication
@@ -1389,17 +1389,26 @@ Required.
 
 Based on organization membership and applicable permissions.
 
+The response is tenant-scoped and paginated. Optional `status` filtering accepts
+`ACTIVE` or `INACTIVE`.
+
 ### Response
 
 ```json
 {
     "data": [
         {
-            "id": "program_001",
+            "id": "UUID",
             "name": "Reference Program",
-            "status": "active"
+            "description": "Organizational reference collection",
+            "status": "ACTIVE"
         }
-    ]
+    ],
+    "meta": {
+        "page": 1,
+        "page_size": 20,
+        "total": 1
+    }
 }
 ```
 
@@ -1408,7 +1417,7 @@ Based on organization membership and applicable permissions.
 # 32. Create Program
 
 ```
-POST /api/v1/programs
+POST /api/v1/programs/
 ```
 
 ### Authentication
@@ -1417,7 +1426,7 @@ Required.
 
 ### Authorization
 
-`program.create`
+`PROGRAM_CREATE`
 
 ### Request
 
@@ -1433,9 +1442,10 @@ Required.
 ```json
 {
     "data": {
-        "id": "program_001",
+        "id": "UUID",
         "name": "Reference Program",
-        "status": "active"
+        "description": "Organizational reference collection",
+        "status": "ACTIVE"
     }
 }
 ```
@@ -1455,7 +1465,7 @@ Required.
 # 33. Get Program
 
 ```
-GET /api/v1/programs/{program_id}
+GET /api/v1/programs/{program_id}/
 ```
 
 ### Authentication
@@ -1471,9 +1481,10 @@ Organization membership plus applicable permission/access.
 ```json
 {
     "data": {
-        "id": "program_001",
+        "id": "UUID",
         "name": "Reference Program",
-        "status": "active"
+        "description": "Organizational reference collection",
+        "status": "ACTIVE"
     }
 }
 ```
@@ -1483,7 +1494,7 @@ Organization membership plus applicable permission/access.
 # 34. Update Program
 
 ```
-PATCH /api/v1/programs/{program_id}
+PATCH /api/v1/programs/{program_id}/
 ```
 
 ### Authentication
@@ -1492,7 +1503,7 @@ Required.
 
 ### Authorization
 
-`program.manage`
+`PROGRAM_UPDATE`
 
 ### Request
 
@@ -1501,6 +1512,17 @@ Required.
     "name": "Updated Reference Program"
 }
 ```
+
+Status is managed only by the activate/deactivate operations; clients cannot
+write it directly.
+
+```
+POST /api/v1/programs/{program_id}/activate/
+POST /api/v1/programs/{program_id}/deactivate/
+```
+
+Both operations require `PROGRAM_UPDATE`. Deactivation preserves existing
+assignments, rejects new assignments, and reactivation allows new assignments.
 
 ---
 
@@ -1511,7 +1533,7 @@ Content Assignment represents the relationship between Programs and Content.
 ## 35.1 List Program Content
 
 ```
-GET /api/v1/programs/{program_id}/content
+GET /api/v1/programs/{program_id}/content/
 ```
 
 ### Authentication
@@ -1520,7 +1542,7 @@ Required.
 
 ### Authorization
 
-Program/content access.
+`PROGRAM_VIEW`
 
 ### Response
 
@@ -1528,9 +1550,10 @@ Program/content access.
 {
     "data": [
         {
-            "content_id": "content_001",
-            "name": "Reference Program",
-            "status": "published"
+            "program_id": "UUID",
+            "content_id": "UUID",
+            "content_title": "Reference Content",
+            "content_status": "PUBLISHED"
         }
     ]
 }
@@ -1541,7 +1564,7 @@ Program/content access.
 # 36. Assign Content to Program
 
 ```
-POST /api/v1/programs/{program_id}/content
+POST /api/v1/programs/{program_id}/content/
 ```
 
 ### Authentication
@@ -1550,13 +1573,13 @@ Required.
 
 ### Authorization
 
-`program.content.manage`
+`ASSIGNMENT_MANAGE`
 
 ### Request
 
 ```json
 {
-    "content_id": "content_001"
+    "content_id": "UUID"
 }
 ```
 
@@ -1567,14 +1590,15 @@ Required.
 - Both belong to same organization
 - Actor has permission
 - Duplicate assignment is prevented
+- New assignments to inactive Programs are rejected with `409`
 
 ### Response
 
 ```json
 {
     "data": {
-        "program_id": "program_001",
-        "content_id": "content_001"
+        "program_id": "UUID",
+        "content_id": "UUID"
     }
 }
 ```
@@ -1595,7 +1619,7 @@ Required.
 # 37. Remove Content Assignment
 
 ```
-DELETE /api/v1/programs/{program_id}/content/{content_id}
+DELETE /api/v1/programs/{program_id}/content/{content_id}/
 ```
 
 ### Authentication
@@ -1604,7 +1628,7 @@ Required.
 
 ### Authorization
 
-`program.content.manage`
+`ASSIGNMENT_MANAGE`
 
 ### Status
 
@@ -1622,9 +1646,9 @@ It only removes the program-content relationship.
 
 ---
 
-# 38. Training Access APIs
+# 38. Program Access Grant APIs
 
-Training Access represents authorization for a user to access protected training resources.
+A Program Access Grant represents authorization for a user to access content assigned to a Program. It remains separate from actual Content Access events.
 
 This must remain separate from actual Content Access.
 
@@ -1640,10 +1664,10 @@ This distinction is established in the domain model.
 
 ---
 
-# 39. Grant Training Access
+# 39. Grant Program Access
 
 ```
-POST /api/v1/access
+POST /api/v1/program-access-grants/
 ```
 
 ### Authentication
@@ -1652,36 +1676,42 @@ Required.
 
 ### Authorization
 
-`access.grant`
+`ACCESS_GRANT`
 
 ### Request
 
 ```json
 {
-    "user_id": "user_001",
-    "program_id": "program_001"
+    "user_id": "UUID",
+    "program_id": "UUID",
+    "expires_at": "2026-12-31T23:59:59Z"
 }
 ```
 
-Depending on the finalized access model, content-specific authorization may also be represented explicitly.
+`expires_at` is optional and, when supplied, must be in the future. A grant authorizes access to eligible content assigned to the Program; no content-specific grant is created.
 
 ### Validation
 
-- User exists
-- User belongs to same organization
-- Program belongs to same organization
-- Actor has permission
-- Required business conditions are satisfied
+- User exists, is active, belongs to the actor's organization, and has the Content Consumer role.
+- Program exists, belongs to the actor's organization, and is active.
+- Actor has `ACCESS_GRANT`.
+- Expiration, when present, is in the future.
+- No unexpired active grant already exists for the same organization/user/program.
 
 ### Response
 
 ```json
 {
     "data": {
-        "id": "access_001",
-        "user_id": "user_001",
-        "program_id": "program_001",
-        "status": "active"
+        "id": "UUID",
+        "user_id": "UUID",
+        "program_id": "UUID",
+        "status": "ACTIVE",
+        "granted_at": "timestamp",
+        "granted_by_id": "UUID",
+        "revoked_at": null,
+        "revoked_by_id": null,
+        "expires_at": "timestamp or null"
     }
 }
 ```
@@ -1699,10 +1729,10 @@ Depending on the finalized access model, content-specific authorization may also
 
 ---
 
-# 40. Revoke Training Access
+# 40. Revoke Program Access
 
 ```
-POST /api/v1/access/{access_id}/revoke
+POST /api/v1/program-access-grants/{grant_id}/revoke/
 ```
 
 ### Authentication
@@ -1711,20 +1741,26 @@ Required.
 
 ### Authorization
 
-`access.revoke`
+`ACCESS_REVOKE`
 
 ### Response
 
 ```json
 {
     "data": {
-        "id": "access_001",
-        "status": "revoked"
+        "id": "UUID",
+        "status": "REVOKED"
     }
 }
 ```
 
-After revocation, the user must not be allowed to initiate new protected access.
+After revocation, the user must not be allowed to initiate new protected access. Revocation is retained as a historical grant state.
+Regranting after revocation creates a new grant row; historical grant records are not reused or deleted. At most one grant may have `ACTIVE` database status for an organization/user/program. Expired grants do not authorize access and may be transitioned to `EXPIRED` when evaluated.
+
+An active Program Access Grant for an inactive Program does not permit protected
+content access. The grant is preserved while the Program is inactive; access
+resumes after reactivation only if the grant remains active and all other
+authorization checks pass.
 
 ---
 
@@ -1795,7 +1831,7 @@ Organization valid
         ↓
 Permission valid
         ↓
-Training Access valid
+Program Access Grant valid
         ↓
 Content assignment valid
         ↓
@@ -1812,35 +1848,33 @@ Content/version available
 
 ### Response
 
-Conceptually:
-
 ```json
 {
     "data": {
-        "access_id": "access_session_001",
-        "content_id": "content_001",
-        "version_id": "version_003",
-        "delivery_token": "<short-lived-token>",
-        "expires_at": "<datetime>"
+        "access_id": "UUID",
+        "content_id": "UUID",
+        "version_id": "UUID",
+        "accessed_at": "timestamp"
     }
 }
 ```
 
-The exact delivery-token mechanism is a System Design implementation decision.
+The access record is bound to the authenticated user and records the exact
+published version selected. Its ID is not an authorization token.
 
 ### Security
 
-The response must not expose unrestricted object-storage credentials or permanent file URLs.
+The response must not expose unrestricted object-storage credentials, permanent
+file URLs, or source storage paths. The backend returns not-found for resources
+outside the user's tenant or current grant/assignment scope.
 
 ---
 
 # 44. Content Delivery
 
 ```
-GET /api/v1/content/{content_id}/delivery
+GET /api/v1/content/{content_id}/access/{access_id}/delivery?page=1
 ```
-
-or an equivalent controlled streaming endpoint.
 
 ### Authentication
 
@@ -1848,7 +1882,11 @@ Required.
 
 ### Authorization
 
-The backend validates the active content-access context.
+The backend validates the authenticated Django session and re-checks the
+Content Access owner, `SECURE_DELIVERY` permission, active unexpired Program
+Access Grant, active Program, assignment, and current published Content
+Version on every page/image request. No separate short-lived delivery token is
+used.
 
 ### Processing
 
@@ -1859,24 +1897,40 @@ Request
    ↓
 Authenticate
    ↓
-Authorize
+Re-check current authorization
    ↓
-Validate Access
+Open private source
    ↓
-Identify Version
+Render requested page/image to PNG
    ↓
-Prepare Protected Delivery
+Apply delivery-time dynamic watermark
    ↓
-Apply Dynamic Watermark
-   ↓
-Deliver Content
-   ↓
-Record Activity
+Return inline PNG (private, no-store)
 ```
 
-The exact streaming/rendering mechanism belongs to System Design.
+PDF pages and JPG/JPEG/PNG/WEBP images are rendered or normalized by the
+backend to PNG. The longest output edge is capped at 2400 pixels. PPTX and MP4
+are not rendered by this MVP endpoint and return `415
+UNSUPPORTED_DELIVERY_FORMAT`; their processing requirements remain deferred.
+The original source is never returned and no public source URL is created. A
+low-opacity watermark is composed onto each PNG using the approved masked
+email, organization name, UTC access timestamp, and content/version reference.
+The rendered response can still be captured by an authorized browser user;
+rendering is controlled delivery, not copy prevention.
 
-The API specification defines the security contract rather than the internal implementation.
+Dynamic watermarking and activity events remain later milestone work.
+
+### Status
+
+```
+200
+400
+401
+403
+404
+415
+422
+```
 
 ---
 
@@ -1915,82 +1969,36 @@ Sensitive access information must only be visible to appropriately authorized us
 
 # 46. Activity APIs
 
-Activity records represent observable interactions with AEGIS.
+Activity events are generated only by trusted backend workflows. There is no
+client event-ingestion endpoint; clients cannot fabricate activity, security,
+or audit history.
 
-Examples include:
-
-- Content viewed
-- Training material opened
-- Content accessed
-- Access attempts
-- Content Consumer interactions
-
-The project proposal explicitly identifies access logging and Content Consumer activity tracking as core capabilities.
-
----
-
-# 47. Record Activity
+## 47. List Activity
 
 ```
-POST /api/v1/activities
+GET /api/v1/activities/
 ```
 
-### Authentication
+### Authentication and Authorization
 
-Required unless the event is generated internally by the backend.
-
-### Authorization
-
-The user may create only activities representing permitted operations.
-
-The API must not allow clients to arbitrarily fabricate privileged audit history.
-
-### Request
-
-```json
-{
-    "type": "content_view",
-    "resource_id": "content_001",
-    "context_id": "access_session_001"
-}
-```
-
-### Response
-
-```json
-{
-    "data": {
-        "id": "activity_001",
-        "type": "content_view",
-        "created_at": "<datetime>"
-    }
-}
-```
-
----
-
-# 48. View Activity
-
-```
-GET /api/v1/activities
-```
-
-### Authentication
-
-Required.
-
-### Authorization
-
-`activity.view`
+Authentication is required. `ACTIVITY_VIEW_OWN` returns only the authenticated
+user's events. `ACTIVITY_VIEW_ORGANIZATION` permits organization-scoped events.
+The organization is always derived from the authenticated user; clients cannot
+select another organization.
 
 ### Query Parameters
 
+Supported filters are `user_id`, `content_id`, `event_type`, `from`, and `to`,
+plus `page` and `page_size`. Date-time values must include a timezone. Unknown
+parameters and invalid event types are rejected. A user with only
+`ACTIVITY_VIEW_OWN` remains restricted to their own events even when supplying
+another `user_id`.
+
+The current allowlisted event types are:
+
 ```
-?user_id=user_001
-&content_id=content_001
-&from=<datetime>
-&to=<datetime>
-&type=content_view
+VIEWER_OPENED
+VIEWER_PAGE_RENDERED
 ```
 
 ### Response
@@ -1999,19 +2007,28 @@ Required.
 {
     "data": [
         {
-            "id": "activity_001",
-            "user_id": "user_001",
-            "type": "content_view",
-            "resource_id": "content_001",
-            "created_at": "<datetime>"
+            "id": "UUID",
+            "user_id": "UUID",
+            "event_type": "VIEWER_OPENED",
+            "occurred_at": "<datetime>",
+            "content_id": "UUID",
+            "content_version_id": "UUID",
+            "program_id": "UUID",
+            "content_access_id": "UUID",
+            "metadata": null
         }
-    ]
+    ],
+    "meta": {
+        "page": 1,
+        "page_size": 50,
+        "total": 1
+    }
 }
 ```
 
 ---
 
-# 49. Audit APIs
+# 48. Audit APIs
 
 Audit is distinct from normal activity.
 
@@ -2022,10 +2039,10 @@ Audit answers:
 
 ---
 
-# 50. List Audit Records
+# 49. List Audit Records
 
 ```
-GET /api/v1/audits
+GET /api/v1/audits/
 ```
 
 ### Authentication
@@ -2034,17 +2051,21 @@ Required.
 
 ### Authorization
 
-`audit.view`
+`AUDIT_VIEW_ORGANIZATION`. Results are restricted to the authenticated user's
+organization. Management does not receive this permission by default; its
+audit visibility remains unassigned until a record scope is approved.
 
 ### Query Parameters
 
 ```
-?actor_id=user_001
-&action=content.publish
+?actor_id=<UUID>
+&action=CONTENT_VERSION_PUBLISHED
 &resource_type=content
-&resource_id=content_001
+&resource_id=<UUID>
 &from=<datetime>
 &to=<datetime>
+&page=1
+&page_size=50
 ```
 
 ### Response
@@ -2053,22 +2074,32 @@ Required.
 {
     "data": [
         {
-            "id": "audit_001",
-            "actor_id": "user_001",
-            "action": "content.publish",
+            "id": "UUID",
+            "actor_user_id": "UUID",
+            "action": "CONTENT_VERSION_PUBLISHED",
             "resource_type": "content_version",
-            "resource_id": "version_003",
-            "created_at": "<datetime>"
+            "resource_id": "UUID",
+            "occurred_at": "<datetime>",
+            "old_values": null,
+            "new_values": {},
+            "metadata": null
         }
-    ]
+    ],
+    "meta": {
+        "page": 1,
+        "page_size": 50,
+        "total": 1
+    }
 }
 ```
 
-Audit records are historical records and should not be silently rewritten by ordinary application operations.
+Audit records are append-only. The API is read-only; it provides no create,
+update, or delete operation for arbitrary audit records. Mutations to audited
+business resources and their records must commit atomically.
 
 ---
 
-# 51. Security Event APIs
+# 50. Security Event APIs
 
 Security events represent security-sensitive occurrences.
 
@@ -2084,10 +2115,10 @@ Security-related event
 
 ---
 
-# 52. View Security Events
+# 51. View Security Events
 
 ```
-GET /api/v1/security-events
+GET /api/v1/security-events/
 ```
 
 ### Authentication
@@ -2096,15 +2127,19 @@ Required.
 
 ### Authorization
 
-Security/audit permission.
+`SECURITY_EVENT_VIEW_ORGANIZATION`. Results are restricted to the
+authenticated user's organization. Platform-level events with a null
+organization are never exposed through this organization-level endpoint.
 
 ### Query Parameters
 
 ```
-?severity=high
-&type=unauthorized_access
+?severity=MEDIUM
+&event_type=ACCESS_DENIED
 &from=<datetime>
 &to=<datetime>
+&page=1
+&page_size=50
 ```
 
 ### Response
@@ -2113,90 +2148,128 @@ Security/audit permission.
 {
     "data": [
         {
-            "id": "event_001",
-            "type": "unauthorized_access",
-            "severity": "high",
-            "created_at": "<datetime>"
+            "id": "UUID",
+            "user_id": "UUID",
+            "event_type": "ACCESS_DENIED",
+            "severity": "MEDIUM",
+            "occurred_at": "<datetime>",
+            "resource_type": "content",
+            "resource_id": "UUID",
+            "metadata": {
+                "reason": "authorization_failed"
+            }
         }
-    ]
+    ],
+    "meta": {
+        "page": 1,
+        "page_size": 50,
+        "total": 1
+    }
 }
 ```
 
-Security information must be restricted to authorized users.
+Security events are created by trusted backend workflows. Security information
+must be restricted to authorized users and tenant scope.
 
 ---
 
-# 53. Analytics APIs
+# 52. Analytics APIs
 
-Analytics are derived primarily from activity, access and audit information.
+Analytics use simple server-side PostgreSQL aggregates over Content Access and
+Activity Event records. One successful viewer open creates one `ContentAccess`
+record and counts as one content view. Page-render events are activity only
+and do not increment content views.
 
-## 53.1 Content Analytics
+## 52.1 Content Analytics
 
 ```
-GET /api/v1/analytics/content
+GET /api/v1/analytics/content/
 ```
 
-### Authentication
+### Authentication and Authorization
 
-Required.
-
-### Authorization
-
-`analytics.view`
+Authentication is required. `ANALYTICS_VIEW_ORGANIZATION` allows analytics
+within the authenticated user's organization. `ANALYTICS_VIEW_ASSIGNED`
+limits a Content Consumer to their own access history for resources currently
+available through an active grant, active Program, assignment, published
+Content, and published current version.
 
 ### Query Parameters
 
-```
-?content_id=content_001
-&from=<datetime>
-&to=<datetime>
-```
+Optional `content_id`, `program_id`, `user_id`, `from`, and `to` filters are
+supported. Date-time filters must include a timezone. Unknown query
+parameters, invalid UUIDs, and reversed date ranges are rejected.
 
 ### Response
 
 ```json
 {
     "data": {
-        "total_accesses": 125,
-        "unique_users": 32,
-        "most_accessed_version": 3
+        "total_views": 125,
+        "active_users": 32,
+        "most_viewed_content": {
+            "content_id": "UUID",
+            "title": "Reference Content",
+            "views": 24
+        },
+        "access_frequency": [
+            {
+                "date": "2026-10-10",
+                "views": 12
+            }
+        ],
+        "version_usage": [
+            {
+                "content_id": "UUID",
+                "content_title": "Reference Content",
+                "content_version_id": "UUID",
+                "version_number": 3,
+                "views": 12
+            }
+        ],
+        "recent_activity": [
+            {
+                "id": "UUID",
+                "event_type": "VIEWER_PAGE_RENDERED",
+                "occurred_at": "<datetime>",
+                "content_id": "UUID"
+            }
+        ]
     }
 }
 ```
 
-The exact analytics metrics are subject to the finalized functional architecture.
+`total_views`, `active_users`, frequency, and version usage are derived from
+granted Content Access records. `active_users` means distinct users with a
+successful Content Access during the selected period. Recent activity comes
+from Activity Events and does not increase view totals. Session counts are
+represented by the Content Access count; average session duration is omitted
+until a reliable session-end event is implemented.
 
----
+The legacy `/api/v1/analytics/trainers` endpoint and
+`analytics.trainer.view` permission are not implemented; no industry-specific
+role or aggregate is introduced.
 
-# 54. Content Consumer Activity Analytics
+## 52.2 Access Report
 
 ```
-GET /api/v1/analytics/trainers
+GET /api/v1/reports/access/
 ```
 
-### Authentication
+`REPORT_VIEW_ORGANIZATION` returns successful access records within the
+authenticated user's organization. `REPORT_VIEW_ASSIGNED` returns only the
+authenticated Content Consumer's accesses to currently assigned/authorized
+resources. Optional filters are `content_id`, `program_id`, `user_id`, `from`,
+and `to`, with `page` and `page_size`.
 
-Required.
+The response is a paginated list containing the access ID, user ID, content
+ID/title, version ID/number, optional Program ID, and access timestamp. It
+does not expose email addresses or private storage details.
 
-### Authorization
-
-`analytics.trainer.view`
-
-### Response
-
-```json
-{
-    "data": {
-        "total_trainers": 20,
-        "active_trainers": 17,
-        "content_accesses": 842
-    }
-}
-```
-
-Advanced AI-based Content Consumer performance analysis remains future scope rather than an MVP API dependency. The project proposal identifies AI-based Content Consumer performance analytics as a future enhancement.
-
-The aggregate response above is outside the Content Consumer's approved analytics scope. The legacy permission identifier and endpoint must not be assigned to this role unless the completed permission matrix explicitly permits an appropriately scoped response.
+The User Activity Report uses `/api/v1/activities/`; Version History uses the
+existing `/api/v1/content/{content_id}/versions/` endpoint; and the Audit
+Report uses `/api/v1/audits/` under its separate `AUDIT_VIEW_ORGANIZATION`
+permission. The report milestone does not grant Management audit visibility.
 
 ---
 

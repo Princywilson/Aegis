@@ -1,9 +1,9 @@
 # Docker-Available Checklist
 
-**Last reviewed:** 2026-10-09  
-**Current state:** Docker Engine 29.8.2 and the PostgreSQL 16 Compose service are available. M3's RBAC, M4's Content/AuditRecord, and M5's Content Version, upload-policy, archive-audit, and permission migrations are applied to the configured `aegis` database. Django checks and migration-drift checks passed; the combined identity/accountability/knowledge/upload-policy suite passed all 93 tests with no skips. The existing `aegis` database repair and restore-tested backup (`aegis-before-migration-repair-20261009.dump`) remain documented. `backend/.env` is absent; this verification used process-local configuration, and credentials must remain private.
+**Last reviewed:** 2026-10-10
+**Current state:** Docker Engine 29.8.2 and PostgreSQL 16 are available. M3 through M10 migrations, including `knowledge.0006` and `accountability.0008`, are applied to the configured `aegis` database. On 2026-10-10, Django check and migration-drift checks passed and `identity accountability knowledge` passed all **134 tests with no skips** against PostgreSQL after M13/M14 backend coverage. M11 required no schema migration. The M14 PostgreSQL end-to-end API scenario passed; the React frontend is implemented and its 5 unit tests/build pass, but authenticated browser-to-API verification remains pending because Django was not running at the Vite proxy target during the browser check. The earlier SQLite M6 run passed 101 tests with 2 PostgreSQL-only skips and is development evidence only. The existing `aegis` database repair and restore-tested backup (`aegis-before-migration-repair-20261009.dump`) remain documented. Node.js 24.20.0/npm 11.19.0 are installed. `backend/.env` is absent; credentials must remain private.
 
-Use this checklist to complete the remaining database and manual verification. Do not treat validation on the isolated database as proof that the existing `aegis` database can be migrated.
+Use this checklist to complete remaining database and manual verification. Do not treat SQLite validation as proof that PostgreSQL integration has passed.
 
 ## M0: Start and Verify PostgreSQL
 
@@ -96,8 +96,8 @@ The PostgreSQL run discovered 35 tests and passed against the configured `aegis`
 - [x] Verify an unknown organization slug creates a platform-scoped event with null `organization_id`, without assigning it to a default tenant or storing the raw password/session token.
 - [x] Verify resolved-organization authentication events store that organization; keep user null if identity was not resolved.
 - [x] Verify the authentication response remains identical for an invalid password and an unknown organization even though their stored event scope differs.
-- [ ] Verify platform-level events are not exposed to organization-level users when the security-event monitoring API is implemented.
-- [ ] Confirm `security_events.organization_id` permits null only for platform-scoped events, while `activity_events.organization_id` remains required. Activity events are not implemented yet.
+- [x] Verify platform-level events are not exposed to organization-level users through the M10 security-event API; its queryset is restricted to the authenticated organization.
+- [x] Confirm `security_events.organization_id` permits null for platform-scoped events while `activity_events.organization_id` remains required.
 - [x] Verify five account failures in a rolling 15-minute window trigger a 15-minute account block, and a successful login clears only the account counter.
 - [x] Verify twenty failures from one source IP in a rolling 15-minute window trigger a 15-minute IP block across account identifiers.
 - [x] Verify blocked responses remain generic and arbitrary `X-Forwarded-For` values do not change the source-IP key.
@@ -107,27 +107,27 @@ The PostgreSQL run discovered 35 tests and passed against the configured `aegis`
 
 ## M3: RBAC (PostgreSQL Verification Passed)
 
-The M3 role boundary was approved and recorded in the Implementation Guide on 2026-10-09. RBAC models, services, commands, `/me` output, and automated tests are implemented. The migration and full relevant suite passed on PostgreSQL. Management audit access remains unassigned pending a more precise audit-record scope. Content Consumer resource-level assignment filtering is still to be implemented with the assignment/access models.
+The M3 role boundary was approved and recorded in the Implementation Guide on 2026-10-09. RBAC models, services, commands, `/me` output, and automated tests are implemented. The migration and full relevant suite passed on PostgreSQL. Management audit access remains unassigned pending a more precise audit-record scope. M7 now enforces Content Consumer resource-level filtering through active Program Access Grants, assignments, and published current versions.
 
 - [x] Approve the initial role capability boundaries for Administrator, Content Manager, Content Consumer, and Management; do not use Django Groups as the AEGIS role model.
 - [x] Define the atomic permission catalogue and seeded role-permission mapping; identity tests exercise the mapping on SQLite.
 - [x] Implement tenant-scoped role assignment and role-permission services, including cross-organization rejection tests on SQLite and PostgreSQL.
-- [ ] Ensure Content Consumer content/version/program reads require assigned/authorized scope; do not grant content mutation, publishing, archiving, version creation, assignment, or access-grant management.
-- [ ] Scope Content Consumer activity to the user's own records and reports/analytics to content/programs assigned to that user; do not grant audit or security-event access.
-- [x] Implement reusable server-side permission checks and a deny-by-default DRF permission class. No content/program operation endpoints exist yet to wire.
+- [x] Ensure Content Consumer content/version/program reads require assigned/authorized scope; do not grant content mutation, publishing, archiving, version creation, assignment, or access-grant management.
+- [x] Scope Content Consumer activity to the user's own records; reports/analytics still require M11 assigned-resource scope. Do not grant audit or security-event access.
+- [x] Implement reusable server-side permission checks and a deny-by-default DRF permission class, wired to the implemented content/program operations.
 - [x] Re-run the full authorization suite against PostgreSQL, including allow/deny behavior, inactive users, and tenant isolation: 45 tests passed, no skips.
 - [x] Verify role mappings, allow/deny behavior, inactive-user handling, tenant-scoped assignment, and Management audit/security-event denials on SQLite (45 total suite tests; 2 PostgreSQL-only tests skipped). This is development evidence only, not PostgreSQL verification.
 - [x] Apply RBAC migrations on PostgreSQL, run migration-drift checks, and execute the complete relevant PostgreSQL test suite (45 tests passed; no skips; no migration drift).
 - [x] Verify `/api/v1/auth/me/` returns the assigned role and effective permissions without cross-tenant roles on SQLite and PostgreSQL.
 - [x] Keep Management audit access denied until its audit-record scope is explicitly approved; security events remain a separate capability.
-- [x] Keep role/permission management APIs unavailable until M10 AuditRecord support can record assignments and permission changes.
+- [x] Record role assignment/removal and permission grant/revocation in transactional audit writes before exposing role-management endpoints; those management endpoints remain unimplemented.
 
-## M4: Content Repository (In Progress)
+## M4: Content Repository (Implemented; Browser Smoke Pending)
 
 - [x] Add the organization-owned Content model and apply its migration to PostgreSQL.
 - [x] Add create, list, retrieve, and metadata-update APIs with server-side AEGIS permission checks.
 - [x] Enforce organization filtering; cross-tenant content is not listed or retrievable.
-- [x] Keep Content Consumer-only list/detail results empty until assignment/access records support an authorized-resource filter.
+- [x] Enforce Content Consumer-only list/detail results through M7's active-grant, assignment, and published-current-version filter.
 - [x] Validate pagination, status/search filters, and search permission; reject unsupported `program_id` until M6.
 - [x] Reject unknown fields, including client-supplied tenant IDs and file data, instead of silently accepting them.
 - [x] Add the minimal organization-scoped AuditRecord prerequisite and CONTENT_ARCHIVED event for archive, with actor/resource/timestamp and old/new status values.
@@ -139,7 +139,7 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 - [x] Implement an injectable private storage abstraction with tenant/content/version UUID keys, streamed size/checksum metadata, protected open/delete methods, duplicate-write protection, and no public URL. The configured local private root is not exposed by static/media routes.
 - [x] Integrate private file upload and stored metadata with Content Version in M5; no public file URL or unprotected download endpoint is allowed.
 - [x] Replace the temporary nullable `current_version_id` UUID reference with the proper Content Version relationship in M5.
-- [ ] Add assignment-backed Content Consumer list/detail filtering when assignment/access models are implemented.
+- [x] Add assignment- and grant-backed Content Consumer list/detail filtering; test tenant isolation, inactive Programs, revoked/expired grants, and current published versions in M7.
 
 ## M5: Content Versioning (Implementation Complete; Operational Checks Pending)
 
@@ -155,6 +155,98 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 - [ ] Verify production ingress/body-size and request timeout settings support the 250 MiB per-file policy.
 - [x] Verify authenticated API session/CSRF behavior for content create/update/archive and version upload in PostgreSQL integration tests.
 - [ ] Perform a human browser smoke test for content/version APIs when a frontend/browser deployment is available.
+
+## M6: Programs + Content Assignment (Implemented; PostgreSQL Verified)
+
+- [x] Add tenant-scoped Program and ContentAssignment models, uniqueness/tenant validation, and permission-checked CRUD, activate/deactivate, assignment, and content-filter APIs.
+- [x] Preserve assignments when deactivating a Program; reject new assignments while inactive; reactivation restores assignment eligibility. Assignment does not grant user access.
+- [x] Run SQLite development checks: `identity accountability knowledge` passed 101 tests with 2 PostgreSQL-only skips; Django system check and migration-drift check passed. This is not PostgreSQL integration evidence.
+- [x] Start Docker/PostgreSQL and apply `knowledge.0004` to the configured PostgreSQL database.
+- [x] Run Django system check and `makemigrations --check --dry-run`; run `identity accountability knowledge` against PostgreSQL: 101 tests passed, no skips.
+- [x] Record PostgreSQL evidence separately from the SQLite development run in the implementation status.
+
+## M7: Program Access Grants (Implemented; PostgreSQL Verified)
+
+- [x] Add tenant-scoped grant lifecycle with active, revoked, and expired states; optional future expiry; and actor/timestamp history.
+- [x] Preserve revoked/expired history and allow regrant by creating a new row; enforce at most one active grant per organization/user/program.
+- [x] Require explicit `ACCESS_GRANT` / `ACCESS_REVOKE` permissions and append grant/revoke audit records in the same transaction.
+- [x] Enforce Content Consumer access only for active grants on active Programs, assigned published Content, and its current published version; preserve grants during Program deactivation.
+- [x] Apply `accountability.0007` and `knowledge.0005` to PostgreSQL `aegis`.
+- [x] Run `knowledge.tests_access_grants` against PostgreSQL: 6 tests passed.
+- [x] Run `identity accountability knowledge` against PostgreSQL: 107 tests passed, no skips; Django check and migration-drift check passed.
+- [x] Use the approved render-based delivery policy: PDF pages and normalized JPG/JPEG/PNG/WEBP images render to private inline PNG; PPTX/MP4 are deferred.
+- [x] Revalidate session, access record, grant, Program, assignment, and published current version on every page/image request; do not add a bearer token.
+- [x] Apply `knowledge.0006` for version-specific Content Access records; keep original files private and set rendered responses to `private, no-store`.
+- [x] Run `knowledge.tests_delivery` against PostgreSQL: 7 tests passed, including tenant/user scope, CSRF, revoked/inactive/stale access denial, page validation, rendering, and unsupported formats.
+- [x] Run `identity accountability knowledge` against PostgreSQL: 114 tests passed, no skips; Django check and migration-drift check passed.
+- [ ] Perform a human browser smoke test when the frontend/viewer is available.
+- [ ] Confirm production render CPU/memory and request-timeout settings for page rendering.
+
+## M9: Dynamic Watermarking (Implemented; Browser Smoke Pending)
+
+- [x] Apply the approved masked email, organization name, UTC access timestamp, and content/version reference to each rendered page/image.
+- [x] Compose a low-opacity repeated diagonal watermark on the response only; leave private originals unchanged and add no watermark table.
+- [x] Verify rendered output contains the approved watermark content and differs from the unwatermarked output in PostgreSQL tests.
+- [ ] Manually verify watermark legibility/placement in a browser viewer when available.
+
+## M10: Activity + Security + Audit (Implemented; PostgreSQL Verified)
+
+- [x] Add the organization-owned ActivityEvent table with tenant/context validation and allowlisted viewer-open/page-render event types.
+- [x] Generate viewer activity and access-denial security events only from trusted backend workflows; do not expose a client activity-ingestion endpoint.
+- [x] Add read-only, paginated activity, audit, and security-event list APIs with permission and tenant scoping.
+- [x] Limit Content Consumer activity to the current user's events; verify organization activity permission and cross-tenant exclusion.
+- [x] Exclude null-organization platform events from organization security-event results.
+- [x] Make AuditRecord instance updates/deletes fail and provide no audit mutation API.
+- [x] Audit user-role assignment/removal and role-permission grant/revocation transactionally; verify rollback when audit persistence fails.
+- [x] Apply `accountability.0008` to PostgreSQL database `aegis`.
+- [x] Run focused M10/RBAC/delivery tests on PostgreSQL: 25 tests passed.
+- [x] Run Django system check and `makemigrations --check --dry-run`; run `identity accountability knowledge`: 122 tests passed, no skips.
+- [x] Run `git diff --check`.
+- [ ] Add an explicitly approved audit-record visibility boundary before granting Management the audit permission.
+- [ ] Perform browser viewer/activity smoke testing when a frontend is available.
+
+## M11: Basic Analytics + Reports (Implemented; PostgreSQL Verified)
+
+- [x] Define one content view as one successful Content Access record; do not count page-render events as additional views.
+- [x] Add organization-scoped content aggregates for total views, active users, most-viewed content, daily access frequency, version usage, and recent activity.
+- [x] Add a paginated Content Access report without exposing email addresses or private storage details.
+- [x] Limit Content Consumer analytics/report access to their own successful access history for currently assigned/authorized resources; verify organization and cross-tenant scope.
+- [x] Exclude denied access records from view and report totals.
+- [x] Omit average session duration because the system has no reliable session-end event.
+- [x] Run `knowledge.tests_analytics` against PostgreSQL: 7 tests passed.
+- [x] Run Django system check and `makemigrations --check --dry-run`; run `identity accountability knowledge`: 129 tests passed, no skips.
+- [x] Run `git diff --check`.
+- [ ] Perform browser dashboard/report smoke testing when the frontend is available.
+
+## M12: React Frontend (Implemented; Authenticated Browser Test Pending)
+
+- [x] Install Node.js/npm and add the React/Vite package manifest and lockfile.
+- [x] Implement the session/CSRF-aware API client and login/logout experience.
+- [x] Implement supported Content, Program/Assignment, Program Access Grant, secure viewer, Activity/Audit/Security Event, analytics, and access-report screens.
+- [x] Make navigation/controls permission-aware while keeping all authorization and tenant decisions on the backend.
+- [x] Surface unavailable user/role/organization-management APIs rather than simulating those operations.
+- [x] Run `npm test` (5 frontend tests) and `npm run build`.
+- [x] Run `npm audit`; report 0 vulnerabilities after upgrading Vitest to 5.0.3.
+- [x] Start Vite and verify its root responds with HTTP 200 and renders the login page.
+- [ ] Start Django against the configured PostgreSQL database and manually verify login, session/CSRF behavior, content/version workflow, access, viewer, and reporting through the browser.
+- [ ] Complete M5/M8/M9 upload/viewer/watermark human browser smoke checks against the running backend.
+
+## M13: Security Hardening (Backend Checks Added; Full Pass Pending)
+
+- [x] Reject arbitrary `organization_id` and unknown query filters on accountability APIs.
+- [x] Reject naive date-time filters; dates must carry an explicit timezone.
+- [x] Deny client-created activity and security events.
+- [x] Reject AuditRecord instance and queryset update/delete attempts.
+- [x] Verify Content Consumer cannot read audit records and organization security events cannot expose platform/other-tenant records.
+- [x] Run focused PostgreSQL accountability hardening checks: 17 tests passed across `accountability.tests_hardening`, `accountability.tests_m10`, and `knowledge.tests_analytics`.
+- [x] Run `npm audit` for the React frontend dependency tree: 0 vulnerabilities.
+- [ ] Complete the full guide security matrix, browser checks, deployment settings, and manual cross-tenant attempts after frontend implementation.
+
+## M14: Integration Testing (Backend Flow Verified; Browser Flow Pending)
+
+- [x] Run a PostgreSQL session/CSRF API scenario covering content creation, version upload/publication, Program creation/assignment, grant, viewer access/delivery, activity/audit, analytics, and report behavior.
+- [x] Repeat cross-tenant resource/access attempts with Organization B and verify tenant isolation.
+- [ ] Integrate and manually verify the same workflow through the React frontend after M12.
 
 ## If a Check Fails
 

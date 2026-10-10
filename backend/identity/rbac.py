@@ -1,6 +1,8 @@
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from rest_framework.exceptions import PermissionDenied
 
+from accountability.models import AuditRecord
 from .models import Permission, Role, RolePermission, User, UserRole
 
 
@@ -127,13 +129,32 @@ def _require_role_manager(actor, organization_id):
 def _create_role_assignment(user, role, assigned_by):
     if user.organization_id != role.organization_id:
         raise ValidationError("A role can only be assigned within its organization.")
-    assignment, _ = UserRole.objects.get_or_create(
-        organization_id=role.organization_id,
-        user=user,
-        role=role,
-        defaults={"assigned_by": assigned_by},
-    )
-    return assignment
+    with transaction.atomic():
+        assignment, created = UserRole.objects.get_or_create(
+            organization_id=role.organization_id,
+            user=user,
+            role=role,
+            defaults={"assigned_by": assigned_by},
+        )
+        if created:
+            AuditRecord.objects.create(
+                organization_id=role.organization_id,
+                actor_user=assigned_by,
+                action=AuditRecord.Action.USER_ROLE_CHANGED,
+                resource_type="user",
+                resource_id=user.id,
+                new_values={
+                    "role_id": str(role.id),
+                    "role_code": role.code,
+                    "change": "assigned",
+                },
+                metadata=(
+                    {"source": "trusted_command"}
+                    if assigned_by is None
+                    else None
+                ),
+            )
+        return assignment
 
 
 def assign_role(user, role, *, assigned_by):
@@ -151,11 +172,33 @@ def remove_role(user, role, *, removed_by):
     if user.organization_id != role.organization_id:
         raise ValidationError("A role can only be removed within its organization.")
     _require_role_manager(removed_by, role.organization_id)
-    return UserRole.objects.filter(
-        organization_id=role.organization_id,
-        user=user,
-        role=role,
-    ).delete()[0] > 0
+    with transaction.atomic():
+        assignment = UserRole.objects.select_for_update().filter(
+            organization_id=role.organization_id,
+            user=user,
+            role=role,
+        ).first()
+        if assignment is None:
+            return False
+        assignment.delete()
+        AuditRecord.objects.create(
+            organization_id=role.organization_id,
+            actor_user=removed_by,
+            action=AuditRecord.Action.USER_ROLE_CHANGED,
+            resource_type="user",
+            resource_id=user.id,
+            old_values={
+                "role_id": str(role.id),
+                "role_code": role.code,
+                "change": "assigned",
+            },
+            new_values={
+                "role_id": str(role.id),
+                "role_code": role.code,
+                "change": "removed",
+            },
+        )
+        return True
 
 
 def grant_permission_to_role(role, permission_code, *, granted_by):
@@ -168,19 +211,53 @@ def grant_permission_to_role(role, permission_code, *, granted_by):
             "Management audit access is unavailable until its record scope is defined."
         )
     permission = Permission.objects.get(code=permission_code)
-    association, _ = RolePermission.objects.get_or_create(
-        role=role,
-        permission=permission,
-    )
+    with transaction.atomic():
+        association, created = RolePermission.objects.get_or_create(
+            role=role,
+            permission=permission,
+        )
+        if created:
+            AuditRecord.objects.create(
+                organization_id=role.organization_id,
+                actor_user=granted_by,
+                action=AuditRecord.Action.PERMISSION_CHANGED,
+                resource_type="role",
+                resource_id=role.id,
+                new_values={
+                    "permission_code": permission.code,
+                    "change": "granted",
+                },
+            )
     return association
 
 
 def revoke_permission_from_role(role, permission_code, *, revoked_by):
     _require_role_manager(revoked_by, role.organization_id)
-    return RolePermission.objects.filter(
-        role=role,
-        permission__code=permission_code,
-    ).delete()[0] > 0
+    with transaction.atomic():
+        association = RolePermission.objects.select_for_update().filter(
+            role=role,
+            permission__code=permission_code,
+        ).first()
+        if association is None:
+            return False
+        permission_code = association.permission.code
+        association.delete()
+        AuditRecord.objects.create(
+            organization_id=role.organization_id,
+            actor_user=revoked_by,
+            action=AuditRecord.Action.PERMISSION_CHANGED,
+            resource_type="role",
+            resource_id=role.id,
+            old_values={
+                "permission_code": permission_code,
+                "change": "granted",
+            },
+            new_values={
+                "permission_code": permission_code,
+                "change": "revoked",
+            },
+        )
+        return True
 
 
 def effective_permission_codes(user):

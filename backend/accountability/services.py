@@ -190,3 +190,15 @@ def record_logout(organization, user):
         event_type="LOGOUT",
         severity=SecurityEvent.Severity.INFO,
     )
+
+
+def record_access_denied(*, organization, user, content_id):
+    SecurityEvent.objects.create(
+        organization=organization,
+        user=user,
+        event_type="ACCESS_DENIED",
+        severity=SecurityEvent.Severity.MEDIUM,
+        resource_type="content",
+        resource_id=content_id,
+        metadata={"reason": "authorization_failed"},
+    )

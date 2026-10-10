@@ -253,7 +253,11 @@ class ContentApiTests(TestCase):
         bad_status = self.client.get(self.list_url, {"status": "invalid"})
         bad_page_size = self.client.get(self.list_url, {"page_size": "not-an-int"})
         zero_page_size = self.client.get(self.list_url, {"page_size": "0"})
-        unsupported_program_filter = self.client.get(
+        invalid_program_filter = self.client.get(
+            self.list_url,
+            {"program_id": "not-a-uuid"},
+        )
+        unknown_program_filter = self.client.get(
             self.list_url,
             {"program_id": "00000000-0000-0000-0000-000000000001"},
         )
@@ -262,7 +266,8 @@ class ContentApiTests(TestCase):
         self.assertEqual(bad_status.status_code, 400)
         self.assertEqual(bad_page_size.status_code, 400)
         self.assertEqual(zero_page_size.status_code, 400)
-        self.assertEqual(unsupported_program_filter.status_code, 400)
+        self.assertEqual(invalid_program_filter.status_code, 400)
+        self.assertEqual(unknown_program_filter.status_code, 404)
 
     def test_blank_title_is_rejected(self):
         self.client.force_authenticate(self.manager)
@@ -355,7 +360,12 @@ class ContentApiTests(TestCase):
             format="json",
         )
         self.assertEqual(denied.status_code, 403)
-        self.assertEqual(AuditRecord.objects.count(), 0)
+        self.assertEqual(
+            AuditRecord.objects.filter(
+                resource_id=own_content.id,
+            ).count(),
+            0,
+        )
 
     def test_rearchive_returns_conflict_without_duplicate_audit(self):
         content = self.make_content(status=Content.Status.ARCHIVED)
@@ -369,7 +379,10 @@ class ContentApiTests(TestCase):
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.data["error"]["code"], "INVALID_STATE")
-        self.assertEqual(AuditRecord.objects.count(), 0)
+        self.assertEqual(
+            AuditRecord.objects.filter(resource_id=content.id).count(),
+            0,
+        )
 
     def test_audit_insert_failure_rolls_back_content_archive(self):
         content = self.make_content()
@@ -388,7 +401,10 @@ class ContentApiTests(TestCase):
 
         content.refresh_from_db()
         self.assertEqual(content.status, Content.Status.DRAFT)
-        self.assertEqual(AuditRecord.objects.count(), 0)
+        self.assertEqual(
+            AuditRecord.objects.filter(resource_id=content.id).count(),
+            0,
+        )
 
     def test_content_version_number_is_unique_per_content_and_positive(self):
         content = self.make_content()
@@ -777,7 +793,12 @@ class ContentApiTests(TestCase):
 
         self.assertEqual(denied.status_code, 403)
         self.assertEqual(cross_tenant.status_code, 404)
-        self.assertEqual(AuditRecord.objects.count(), 0)
+        self.assertEqual(
+            AuditRecord.objects.filter(
+                resource_type="content_version",
+            ).count(),
+            0,
+        )
 
     def test_rearchive_and_audit_failure_are_conflicts_or_roll_back(self):
         content = self.make_content()
@@ -875,4 +896,9 @@ class ContentApiTests(TestCase):
         self.assertIsNone(content.current_version_id)
         self.assertEqual(version.status, ContentVersion.Status.DRAFT)
         self.assertIsNone(version.published_at)
-        self.assertEqual(AuditRecord.objects.count(), 0)
+        self.assertEqual(
+            AuditRecord.objects.filter(
+                action=AuditRecord.Action.CONTENT_VERSION_PUBLISHED,
+            ).count(),
+            0,
+        )

@@ -1,5 +1,6 @@
 from io import StringIO
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
@@ -7,6 +8,8 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.test import APIClient
+
+from accountability.models import AuditRecord
 
 from .models import Organization, Permission, Role, User, UserRole
 from .permissions import HasAegisPermission
@@ -102,6 +105,13 @@ class RbacTests(TestCase):
         )
 
         self.assertEqual(target.user_roles.count(), 1)
+        self.assertEqual(
+            AuditRecord.objects.filter(
+                action=AuditRecord.Action.USER_ROLE_CHANGED,
+                resource_id=target.id,
+            ).count(),
+            1,
+        )
         with self.assertRaises(CommandError):
             call_command(
                 "assign_user_role",
@@ -281,6 +291,92 @@ class RbacTests(TestCase):
             )
         )
         self.assertFalse(has_permission(self.consumer, Permission.Code.CONTENT_VIEW))
+
+    def test_role_and_permission_changes_create_audit_records(self):
+        target = User.objects.create_user(
+            email="target@example.com",
+            password="test-password",
+            organization=self.organization,
+        )
+        role = self.roles["content_consumer"]
+
+        assign_role(target, role, assigned_by=self.admin)
+        assignment_record = AuditRecord.objects.get(
+            action=AuditRecord.Action.USER_ROLE_CHANGED,
+            resource_id=target.id,
+        )
+        self.assertEqual(assignment_record.new_values["change"], "assigned")
+        assign_role(target, role, assigned_by=self.admin)
+        self.assertEqual(
+            AuditRecord.objects.filter(
+                action=AuditRecord.Action.USER_ROLE_CHANGED,
+                resource_id=target.id,
+            ).count(),
+            1,
+        )
+
+        self.assertTrue(remove_role(target, role, removed_by=self.admin))
+        removal_record = AuditRecord.objects.get(
+            action=AuditRecord.Action.USER_ROLE_CHANGED,
+            resource_id=target.id,
+            new_values__change="removed",
+        )
+        self.assertEqual(removal_record.old_values["role_code"], role.code)
+
+        permission_code = Permission.Code.AUDIT_VIEW_ORGANIZATION
+        grant_permission_to_role(
+            role,
+            permission_code,
+            granted_by=self.admin,
+        )
+        grant_record = AuditRecord.objects.get(
+            action=AuditRecord.Action.PERMISSION_CHANGED,
+            resource_id=role.id,
+            new_values__change="granted",
+        )
+        self.assertEqual(
+            grant_record.new_values["permission_code"],
+            permission_code,
+        )
+
+        self.assertTrue(
+            revoke_permission_from_role(
+                role,
+                permission_code,
+                revoked_by=self.admin,
+            )
+        )
+        revoke_record = AuditRecord.objects.get(
+            action=AuditRecord.Action.PERMISSION_CHANGED,
+            resource_id=role.id,
+            new_values__change="revoked",
+        )
+        self.assertEqual(
+            revoke_record.old_values["permission_code"],
+            permission_code,
+        )
+
+    def test_role_change_rolls_back_when_audit_write_fails(self):
+        target = User.objects.create_user(
+            email="rollback@example.com",
+            password="test-password",
+            organization=self.organization,
+        )
+
+        with patch(
+            "identity.rbac.AuditRecord.objects.create",
+            side_effect=RuntimeError("audit storage unavailable"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "audit storage unavailable"):
+                assign_role(
+                    target,
+                    self.roles["content_consumer"],
+                    assigned_by=self.admin,
+                )
+
+        self.assertFalse(
+            UserRole.objects.filter(user=target).exists()
+        )
 
     def test_inactive_users_have_no_effective_permissions(self):
         self.consumer.status = User.Status.INACTIVE

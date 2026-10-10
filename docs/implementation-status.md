@@ -1,6 +1,6 @@
 # AEGIS Implementation Status
 
-**Last reviewed:** 2026-10-09  
+**Last reviewed:** 2026-10-10
 **Source of truth:** [Implementation Guide](implementation-guide.md.md)
 
 This file records implementation progress and how to test the work that exists. A check passing on SQLite is not evidence that PostgreSQL integration has passed.
@@ -11,19 +11,20 @@ This file records implementation progress and how to test the work that exists. 
 
 - Inspected the Django project structure, settings, API routing, requirements, environment template, migrations, and Docker Compose configuration.
 - Python 3.12.10 and the pinned backend requirements are available in `venv`.
-- Docker Engine 29.8.2 is available and the Compose PostgreSQL 16 service is running.
+- Docker Engine 29.8.2 and PostgreSQL 16 are available. The PostgreSQL integration validations on 2026-10-10 used the configured `aegis` database; Docker/PostgreSQL was responsive during M7 verification.
 - The local PostgreSQL role credentials were aligned to the current Compose configuration to restore host authentication; no application data was changed.
 - Django's system check passes.
 - A custom-format backup of the existing `aegis` database, `aegis-before-migration-repair-20261009.dump`, was created locally, its archive listing verified, and restored into a disposable database before repair.
 - The existing `aegis` database was repaired from the verified backup: the current identity migration is recorded, the login column and missing permission/group join tables match the current model, and the tenant-email constraint uses its current name.
 - All current migrations, including the M3 RBAC migration, apply on `aegis`; `showmigrations` reports them applied and `makemigrations --check --dry-run` reports no changes.
 - Temporary validation and repair-clone databases were removed after successful verification.
+- Node.js 24.20.0 and npm 11.19.0 were installed for the React frontend. The frontend package manifest and lockfile are present.
 
 ### Not yet complete
 
 - `backend/.env` is absent. PostgreSQL validation used process-local environment variables; no credentials were added to source or documentation.
 - The legacy recorder entry `identity.0001_initial_organization_and_user` is retained as historical metadata; the current `identity.0001_initial` entry is also recorded, so Django's current migration graph is consistent.
-- Node.js and npm are unavailable, so the full M0 toolchain check is incomplete.
+- The frontend development server proxies `/api` to `http://127.0.0.1:8000`, so the Django API must be started separately for authenticated browser testing.
 - The guide's clean-worktree criterion is not met. The pre-existing untracked `Notes.md` was left untouched; implementation changes are also currently uncommitted.
 
 ## Milestone 1: Organization + Custom Identity
@@ -67,34 +68,34 @@ This file records implementation progress and how to test the work that exists. 
 ### Operational follow-ups
 
 - Production scheduling for `cleanup_auth_rate_limits` is environment-specific and is not configured in this repository.
-- Security-event read authorization tests belong with the future security-event monitoring API; organization users must never see platform-level or other-tenant events.
-- The `activity_events` model is not implemented yet; validate its required organization ownership when its milestone begins.
+- Organization security-event reads are tenant-scoped and exclude platform-level rows through the M10 API; platform-level monitoring remains outside the organization API.
+- M10 `ActivityEvent` requires organization ownership and validates linked user/resource/access tenant and context consistency.
 
 ## How to Test Now
 
 ### SQLite development checks
 
-Run from the repository root. Test-only environment values let Django load settings when `backend/.env` is absent; the command then replaces the database with in-memory SQLite. It checks configuration and migration consistency, then runs the implemented identity and accountability tests. The PostgreSQL-only concurrency cases are skipped.
+Run from the repository root. Test-only environment values let Django load settings when `backend/.env` is absent; the command then replaces the database with in-memory SQLite. It checks configuration and migration consistency, then runs the identity, accountability, and knowledge tests, including M6 program/assignment coverage. PostgreSQL-only tests are skipped by their explicit database requirements.
 
 ```powershell
-.\venv\Scripts\python.exe -c "import os,sys; os.environ.update({'DJANGO_SECRET_KEY':'sqlite-test-only-secret','DJANGO_DEBUG':'true','POSTGRES_DB':'unused','POSTGRES_USER':'unused','POSTGRES_PASSWORD':'unused','POSTGRES_HOST':'127.0.0.1','POSTGRES_PORT':'5432'}); sys.path.insert(0,'backend'); os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); from django.conf import settings; settings.DATABASES={'default':{'ENGINE':'django.db.backends.sqlite3','NAME':':memory:'}}; import django; django.setup(); from django.core.management import call_command; call_command('check'); call_command('makemigrations','--check','--dry-run'); call_command('test','identity','accountability',verbosity=1)"
+.\venv\Scripts\python.exe -c "import os,sys; os.environ.update({'DJANGO_SECRET_KEY':'sqlite-test-only-secret','DJANGO_DEBUG':'true','POSTGRES_DB':'unused','POSTGRES_USER':'unused','POSTGRES_PASSWORD':'unused','POSTGRES_HOST':'127.0.0.1','POSTGRES_PORT':'5432'}); sys.path.insert(0,'backend'); os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); from django.conf import settings; settings.DATABASES={'default':{'ENGINE':'django.db.backends.sqlite3','NAME':':memory:'}}; import django; django.setup(); from django.core.management import call_command; call_command('check'); call_command('makemigrations','--check','--dry-run'); call_command('test','identity','accountability','knowledge',verbosity=1)"
 ```
 
-This historical M3 development check is not evidence for M4/M5 PostgreSQL integration. SQLite results do not verify PostgreSQL integration.
+SQLite test results are development evidence only. They do not verify PostgreSQL integration or PostgreSQL-specific locking, constraints, and concurrency behavior.
 
 ### PostgreSQL integration checks
 
-The RBAC, M4, and M5 migrations are applied to the configured `aegis` PostgreSQL database, including the new version-archive permission, audit action, version notes, and upload policy support. Django's system check passed, `makemigrations --check --dry-run` reported no changes, `git diff --check` passed, and `.\venv\Scripts\python.exe backend\manage.py test identity accountability knowledge knowledge.tests_uploads` passed all 93 tests with no skips against PostgreSQL. This is PostgreSQL integration evidence; the earlier SQLite M3 run is separate development evidence. Running bare `manage.py test` from the repository root discovers zero tests in this layout.
+The RBAC and M4-M8 migrations are applied to the configured `aegis` PostgreSQL database. On 2026-10-10, migrations `knowledge.0004`, `accountability.0007`, `knowledge.0005`, and `knowledge.0006` applied successfully; Django's system check passed; `makemigrations --check --dry-run` reported no changes; and `.\venv\Scripts\python.exe backend\manage.py test identity accountability knowledge` passed all 114 tests with no skips against PostgreSQL. This is PostgreSQL integration evidence for M3-M8. The earlier SQLite M3 and M6 runs are separate development evidence. Running bare `manage.py test` from the repository root discovers zero tests in this layout.
 
 ## Current Progress and Next Step
 
 M0/M1 database gates and M2 PostgreSQL integration checks now pass. The approved domain-neutral role name is `Content Consumer`, defined as a user authorized to access and consume organizational content according to assigned permissions and access grants. This is a role of the existing `User`, not a separate user type/entity/table. The agreed high-level access boundary is assigned/authorized content and permitted current versions, searching only that authorized content, secure content delivery without source-file download/sharing, no content mutation/publishing/archiving/version creation/assignment changes absent a separate explicit permission, and tracking significant content interactions. Limited analytics/report access is restricted to the user's own activity and reports for content/programs assigned to them; organization-wide analytics and audit/security-event access are excluded.
 
-M3 baseline decision approved on 2026-10-09: the four system roles and their atomic capability assignments are recorded in the Implementation Guide. This is a new RBAC baseline; there was no runtime Trainer mapping in M2 to preserve. Implemented locally: organization-scoped Role, Permission, UserRole, and RolePermission models; idempotent role seeding and trusted user-role assignment commands; explicit role-management/grant services; deny-by-default DRF permission class; and `/me` effective role/permission output. PostgreSQL verification passed: the RBAC migration applied to `aegis`, Django's system check passed, migration drift check reported no changes, and all 45 identity/accountability tests passed with no PostgreSQL-only skips. The SQLite run (45 tests, 2 PostgreSQL-only tests skipped) remains development evidence only. Content Consumer receives only assigned-resource reporting/analytics capabilities; Management audit access is not assigned until its record scope is defined; no role implies platform-wide administration. Assignment/report query enforcement remains a dependency of the resource-owning milestones. M4 adds the minimal `CONTENT_ARCHIVED` AuditRecord required for content archival; role/permission management APIs remain deferred until M10 records their assignment and permission changes. Legacy `/analytics/trainers` identifiers/examples remain outside the Content Consumer grant until replaced with a properly scoped implementation. The user approved domain-neutral `Program` terminology for M6; `Training Access` and `Trainer Access` remain separate terminology-review items.
+M3 baseline decision approved on 2026-10-09: the four system roles and their atomic capability assignments are recorded in the Implementation Guide. This is a new RBAC baseline; there was no runtime Trainer mapping in M2 to preserve. Implemented locally: organization-scoped Role, Permission, UserRole, and RolePermission models; idempotent role seeding and trusted user-role assignment commands; explicit role-management/grant services; deny-by-default DRF permission class; and `/me` effective role/permission output. PostgreSQL verification passed: the RBAC migration applied to `aegis`, Django's system check passed, migration drift check reported no changes, and all 45 identity/accountability tests passed with no PostgreSQL-only skips. The SQLite run (45 tests, 2 PostgreSQL-only tests skipped) remains development evidence only. Content Consumer receives only assigned-resource reporting/analytics capabilities; Management audit access is not assigned until its record scope is defined; no role implies platform-wide administration. Assignment/report query enforcement remains a dependency of the resource-owning milestones. M4 adds the minimal `CONTENT_ARCHIVED` AuditRecord required for content archival; role/permission management APIs remain deferred until M10 records their assignment and permission changes. Legacy `/analytics/trainers` identifiers/examples remain outside the Content Consumer grant until replaced with a properly scoped implementation. The user approved domain-neutral `Program` terminology for M6 and **Program Access Grant** for M7.
 
-## Milestone 4: Content Repository (In Progress)
+## Milestone 4: Content Repository (Implemented; Browser Smoke Pending)
 
-Implemented the tenant-owned `Content` schema and PostgreSQL migration, including organization, title, description, lifecycle status, creator, timestamps, indexes, and a current-version relationship added in M5. Added session-authenticated, permission-checked APIs for create, list, retrieve, metadata update, and archive. List supports pagination, status, and permission-checked text search; organization is taken from the authenticated user, and content is tenant-filtered. Content Consumer-only users receive no list/detail results until assignment/access models can enforce resource-level scope. Unknown fields such as client-supplied organization IDs and file payloads are rejected.
+Implemented the tenant-owned `Content` schema and PostgreSQL migration, including organization, title, description, lifecycle status, creator, timestamps, indexes, and a current-version relationship added in M5. Added session-authenticated, permission-checked APIs for create, list, retrieve, metadata update, and archive. List supports pagination, status, and permission-checked text search; organization is taken from the authenticated user, and content is tenant-filtered. M7 now scopes Content Consumer list/detail results using active Program Access Grants and assignments; unknown fields such as client-supplied organization IDs and file payloads are rejected.
 
 Added the minimal `AuditRecord` model to the existing accountability app, matching the established schema and initially allowing only `CONTENT_ARCHIVED`. The archive service locks and tenant-filters the content row, changes its state, and writes the actor-attributed record within one atomic transaction. It rejects repeat archives with `409 INVALID_STATE`; cross-tenant content appears not found. Audit-record failure rolls back the content state change.
 
@@ -102,7 +103,7 @@ Added an injectable `StorageService` with a private local filesystem adapter, in
 
 PostgreSQL verification: `accountability.0004_auditrecord` applied to `aegis`; Django check and migration-drift check passed; `identity accountability knowledge` passed all 61 tests without skips. The storage-service test module also passed all 6 tests. Tests cover organization scoping, Content Consumer scope/denial, CRUD metadata, search/filter validation, archive authorization and tenant isolation, audit contents, repeat-archive conflict, rollback on audit-insert failure, storage key/metadata, no public URL, traversal rejection, and duplicate-write protection.
 
-M4 implementation is in place. The broader audit history/query features and additional audit actions remain in M10. Authenticated API session/CSRF behavior for content create/update/archive is covered by PostgreSQL integration tests; a human browser smoke test remains pending because no frontend/browser deployment is configured here. Assignment-backed Content Consumer query scope remains a future dependency.
+M4 implementation is in place. The broader audit history/query features and additional audit actions remain in M10. Authenticated API session/CSRF behavior for content create/update/archive is covered by PostgreSQL integration tests; a human browser smoke test remains pending because no frontend/browser deployment is configured here.
 
 ## Milestone 5: Content Versioning (Implementation Complete; Operational Checks Pending)
 
@@ -112,8 +113,67 @@ Added tenant- and permission-checked version upload/list/detail/publish/archive 
 
 PostgreSQL verification: all M5 migrations are applied; the combined `identity accountability knowledge knowledge.tests_uploads` suite passed all 93 tests with no skips. Django check, migration-drift check, and `git diff --check` passed. Tests cover the approved per-file limits, MIME/signature checks, session/CSRF behavior, upload permissions and tenant isolation, private storage metadata, storage cleanup after database failure, publication, non-current archiving, current-version conflict, audit rollback, and historical immutability.
 
-The user approved the initial policy: PDF 50 MiB, PPTX 50 MiB, JPG/JPEG/PNG/WEBP 10 MiB, and MP4 250 MiB per file. Template uploads and external-link content remain deferred without removing them from broader product scope. No public file URL or download endpoint was added. API session/CSRF behavior for file upload is covered by PostgreSQL integration tests; a human browser smoke test remains pending because no frontend/browser deployment is configured here. Deployment-specific request-body/time-out limits must support the approved 250 MiB maximum before production rollout.
+The user approved the initial policy: PDF 50 MiB, PPTX 50 MiB, JPG/JPEG/PNG/WEBP 10 MiB, and MP4 250 MiB per file. Template uploads and external-link content remain deferred without removing them from broader product scope. No public file URL or download endpoint was added. API session/CSRF behavior for file upload is covered by the historical PostgreSQL integration tests; a human browser smoke test remains pending because no frontend/browser deployment is configured here. Deployment-specific request-body and timeout limits must support the approved 250 MiB maximum before production rollout. Those environment-dependent checks remain open and are not represented as passed.
 
-M0 still needs Node.js/npm, a local `backend/.env`, and the clean-worktree/baseline checkpoint criteria.
+M0 still needs a local `backend/.env` and the clean-worktree/baseline checkpoint criteria.
 
-Next: close the remaining environment-dependent browser smoke and deployment request-body/time-out checks before starting M6. M6's domain-neutral `Program` and `Program-Content Assignment` terminology is approved and recorded in the guide, API specification, and architecture documents; M6 implementation has not started. Add assignment-backed Content Consumer query scoping when assignment/access models arrive; until then, Consumer-only list/detail access stays empty. Keep Management audit access disabled until its precise record boundary is approved, and keep role-management APIs deferred until M10 adds audit actions for role and permission changes.
+## Milestone 6: Programs + Content Assignment (Implemented; PostgreSQL Verified)
+
+Added organization-scoped `Program` and `ContentAssignment` models and migration, tenant and duplicate-pair validation, permission-checked program CRUD and activate/deactivate APIs, assignment create/list/remove APIs, and `program_id` content filtering. Deactivation retains existing assignments and rejects new ones; reactivation permits assignments again. Assignment relationships do not grant user access. The approved inactive-Program rule is recorded in the Implementation Guide and API specification.
+
+**SQLite development verification (2026-10-10):** Django system check passed; `makemigrations --check --dry-run` found no model drift; the full `identity accountability knowledge` suite passed 101 tests with 2 PostgreSQL-only tests skipped, including all 8 `knowledge.tests_programs` tests. This is development evidence only, separate from PostgreSQL integration.
+
+**PostgreSQL integration verification (2026-10-10):** Migration `knowledge.0004` applied successfully to `aegis`; Django check and migration-drift check passed; `identity accountability knowledge` passed 101 tests with no skips; and `git diff --check` passed. M6's PostgreSQL gate is complete.
+
+## Milestone 7: Program Access Grants (Implemented; PostgreSQL Verified)
+
+Added tenant-scoped Program Access Grants with active, revoked, and expired states; optional expiry; grant/revoke actor and timestamp history; and a PostgreSQL conditional unique constraint allowing at most one active grant per organization/user/program while retaining multiple historical grants. The approved regrant behavior creates a new row after revocation or expiry. Grant/revoke APIs require their explicit permissions and write audit records transactionally. Access is limited to active Content Consumer users and active Programs; protected content, assignment, and version queries require an unexpired active grant, an assignment, published Content, and the current published version. Program deactivation preserves the grant while denying access; reactivation restores eligibility when all other checks remain valid.
+
+**PostgreSQL integration verification (2026-10-10):** Applied `accountability.0007` and `knowledge.0005` to the configured `aegis` database. The focused `knowledge.tests_access_grants` run passed all 6 tests. After adapting the M6 consumer-view test to provide the now-required grant, `identity accountability knowledge` passed all 107 tests with no skips. Django check and migration-drift check passed. These results are PostgreSQL integration evidence, not SQLite-only checks.
+
+## Milestone 8: Secure Content Delivery (Implemented; Browser Smoke Pending)
+
+Implemented session-authenticated access creation and rendered delivery. Starting access creates a tenant/user/program/content/version-bound Content Access record only when the user has `SECURE_DELIVERY`, an active unexpired Program Access Grant, an active Program, an assignment, and published Content with its current published version. Each delivery request re-checks the authenticated session, the user-bound access record, grant expiry/revocation, Program state, assignment, and current version; a different user, tenant, revoked grant, inactive Program, removed assignment, or stale version receives not-found.
+
+PDF is rendered one requested page at a time to PNG. JPG/JPEG/PNG/WEBP are normalized to PNG, with metadata excluded from the representation. Raster output is capped at 2400 pixels on the longest edge and image source dimensions are bounded. Original files remain in private storage; responses are inline PNG with `private, no-store` and `nosniff` headers. PPTX and MP4 delivery are deferred and return 415. No short-lived token system, public file URL, or raw source delivery was added. M9 adds the approved dynamic watermark to rendered responses; rendering does not prevent screenshots or saving the rendered representation.
+
+**PostgreSQL integration verification (2026-10-10):** Applied `knowledge.0006`. The focused `knowledge.tests_delivery` suite passed 7 tests, including watermark content and rendered pixel output. The full `identity accountability knowledge` suite passed all 114 tests with no skips; Django system check and migration-drift check passed. Tests exercise rendered PDF pages/images, session/CSRF, access/grant/tenant/program/assignment/version checks, revocation and stale-version denial, page validation, private no-store headers, and deferred formats. A human browser smoke test remains pending because no frontend is configured.
+
+## Milestone 9: Dynamic Watermarking (Implemented; Browser Smoke Pending)
+
+Applied a low-opacity repeated diagonal watermark to every rendered PNG page/image response at delivery time. The approved fields are masked email (first local-part character plus `***`, with domain retained), organization name, UTC access timestamp, and content UUID prefix/version number. The watermark is composed on the rendered representation only; private originals are unchanged and there is no permanent watermark table. Unauthorized requests cannot invoke rendering or watermark generation.
+
+M9 adds no schema changes. PostgreSQL delivery tests verify the watermark fields and that output pixels differ from the unwatermarked page; the complete 114-test suite passed on PostgreSQL. Browser legibility and placement remain pending manual viewer smoke testing.
+
+## Milestone 10: Activity + Security + Audit (Implemented; PostgreSQL Verified)
+
+Added organization-owned, allowlisted `ActivityEvent` records for successful viewer opens and rendered pages. Delivery writes those events server-side with the user, Content, Content Version, Program, and Content Access context; client event injection is not available. Added read-only, paginated activity, audit, and security-event APIs. Content Consumers are restricted to their own activity, organization activity requires its separate permission, and all list APIs derive tenant scope from the authenticated user. Organization security-event queries exclude platform-level and other-organization rows. Audit records reject instance updates/deletes and have no mutation API.
+
+Expanded audit actions for Program, assignment, Program Access Grant, user-role, and permission changes. RBAC role/permission mutation services now persist their `USER_ROLE_CHANGED` and `PERMISSION_CHANGED` records in the same transaction as the mutation. Existing content, version, Program, assignment, and grant actions remain transactional. Management does not receive audit or security-event permissions by default; no policy broadening was made.
+
+**PostgreSQL integration verification (2026-10-10):** Applied `accountability.0008` to the configured `aegis` database. Focused M10/RBAC/delivery tests passed **25 tests**. Django system check passed, `makemigrations --check --dry-run` found no drift, and `identity accountability knowledge` passed **122 tests with no skips** against PostgreSQL. `git diff --check` passed. These are PostgreSQL results; SQLite results are not substituted. Browser viewer/manual legibility and deployment resource/time-limit checks remain pending from M8/M9, as do M5 upload ingress/timeout checks.
+
+## Milestone 11: Basic Analytics + Reports (Implemented; PostgreSQL Verified)
+
+Added organization-scoped content analytics at `/api/v1/analytics/content/` and a paginated Content Access report at `/api/v1/reports/access/`. Organization-level permissions are tenant-filtered; Content Consumers are limited to their own successful Content Access history for currently assigned resources backed by an active grant, active Program, assignment, published Content, and published current version. Unauthorized access attempts and denied access records do not count as views.
+
+The approved view definition is one successful Content Access record per viewer open. Page-render Activity Events remain usage detail and never increment view counts. Analytics report total views, distinct users with successful access during the selected period, most-viewed Content, daily access frequency, version usage, and recent activity. Session count is represented by the same Content Access records. Average session duration is omitted because no reliable session-end signal exists. Existing M10 Activity, Audit, and Content Version list APIs serve the corresponding User Activity, Audit, and Version History reports.
+
+**PostgreSQL integration verification (2026-10-10):** Focused `knowledge.tests_analytics` passed **7 tests**. No schema changes were required. Django system check passed, `makemigrations --check --dry-run` found no drift, and the full `identity accountability knowledge` suite passed **134 tests with no skips** against PostgreSQL after adding M13/M14 coverage. `git diff --check` passed. This is PostgreSQL evidence, not a SQLite substitute.
+
+## Milestone 12: React Frontend (Implemented; Browser/API Smoke Pending)
+
+Added a React/Vite application consuming the existing `/api/v1/` session-authenticated APIs. The API client includes browser credentials, obtains and sends Django CSRF tokens on unsafe requests, refreshes the token after login, preserves pagination metadata, and surfaces API errors. Frontend permission checks only tailor navigation and controls; authorization and tenant isolation remain server-enforced.
+
+Implemented organization login, workspace overview, supported content and version workflows (create, upload draft, publish/archive), Programs and assignments, Program Access Grant create/revoke and lookup by user UUID, page-by-page protected viewer delivery, read-only Activity/Audit/Security Event lists, analytics, and access reports. The Administration page explicitly reports that user/role/organization-management APIs are not currently available; no frontend-only or simulated management behavior was added.
+
+Node.js **24.20.0** and npm **11.19.0** are available; dependencies are recorded in `frontend/package-lock.json`. Frontend verification: `npm test` passed **5 tests**; `npm run build` passed; `npm audit` reported **0 vulnerabilities** after upgrading the Vitest test runner to patched version 5.0.3. Vite served the login screen and returned HTTP 200. Authenticated browser/API smoke testing is still pending: the Django API was not running at `127.0.0.1:8000` during browser verification. Run the backend against the configured PostgreSQL database before validating login and the full browser workflow. These frontend checks do not replace PostgreSQL integration tests.
+
+## Pending Milestones
+
+- **M5 operational checks:** human browser smoke test and production ingress/body-size/timeout confirmation for 250 MiB uploads.
+- **M12 browser integration:** React UI and frontend tests/build are implemented; authenticated browser smoke testing against the Django/PostgreSQL API remains open. User, role, and organization configuration controls also await backend APIs.
+- **M13 Security Hardening:** accountability API input/tenant checks and append-only audit protections have focused PostgreSQL coverage; the full milestone security pass remains pending the frontend and the documented manual/security scenarios.
+- **M14 Integration Testing:** one PostgreSQL end-to-end scenario uses real login sessions and CSRF-protected requests to cover content-to-delivery-to-analytics/report behavior and Organization B isolation. Frontend/browser integration remains pending M12.
+
+Content Consumer list/detail, Program, assignment, and version scope now enforces Program Access Grants. Keep Management audit access disabled until its precise record boundary is approved. M5 browser and production ingress/body-size/timeout checks remain environment-dependent.

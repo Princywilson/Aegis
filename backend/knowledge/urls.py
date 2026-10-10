@@ -1,17 +1,39 @@
 from django.urls import path
 
+from .analytics_views import ContentAccessReportView, ContentAnalyticsView
 from .views import (
     ContentArchiveView,
+    ContentAccessCreateView,
+    ContentDeliveryView,
     ContentDetailView,
     ContentListCreateView,
     ContentVersionDetailView,
     ContentVersionListView,
     ContentVersionArchiveView,
     ContentVersionPublishView,
+    ProgramActivateView,
+    ProgramAccessGrantListCreateView,
+    ProgramAccessGrantRevokeView,
+    ProgramContentAssignmentDeleteView,
+    ProgramContentListCreateView,
+    ProgramDeactivateView,
+    ProgramDetailView,
+    ProgramListCreateView,
+    UserAccessGrantListView,
 )
 
 
 urlpatterns = [
+    path(
+        "analytics/content/",
+        ContentAnalyticsView.as_view(),
+        name="content-analytics",
+    ),
+    path(
+        "reports/access/",
+        ContentAccessReportView.as_view(),
+        name="content-access-report",
+    ),
     path("content/", ContentListCreateView.as_view(), name="content-list"),
     path(
         "content/<uuid:pk>/",
@@ -22,6 +44,16 @@ urlpatterns = [
         "content/<uuid:pk>/archive/",
         ContentArchiveView.as_view(),
         name="content-archive",
+    ),
+    path(
+        "content/<uuid:content_id>/access/",
+        ContentAccessCreateView.as_view(),
+        name="content-access-create",
+    ),
+    path(
+        "content/<uuid:content_id>/access/<uuid:access_id>/delivery/",
+        ContentDeliveryView.as_view(),
+        name="content-delivery",
     ),
     path(
         "content/<uuid:content_id>/versions/",
@@ -42,5 +74,46 @@ urlpatterns = [
         "content/<uuid:content_id>/versions/<uuid:version_id>/archive/",
         ContentVersionArchiveView.as_view(),
         name="content-version-archive",
+    ),
+    path("programs/", ProgramListCreateView.as_view(), name="program-list"),
+    path(
+        "programs/<uuid:pk>/",
+        ProgramDetailView.as_view(),
+        name="program-detail",
+    ),
+    path(
+        "programs/<uuid:program_id>/activate/",
+        ProgramActivateView.as_view(),
+        name="program-activate",
+    ),
+    path(
+        "programs/<uuid:program_id>/deactivate/",
+        ProgramDeactivateView.as_view(),
+        name="program-deactivate",
+    ),
+    path(
+        "programs/<uuid:program_id>/content/",
+        ProgramContentListCreateView.as_view(),
+        name="program-content-list",
+    ),
+    path(
+        "programs/<uuid:program_id>/content/<uuid:content_id>/",
+        ProgramContentAssignmentDeleteView.as_view(),
+        name="program-content-remove",
+    ),
+    path(
+        "program-access-grants/",
+        ProgramAccessGrantListCreateView.as_view(),
+        name="program-access-grant-create",
+    ),
+    path(
+        "program-access-grants/<uuid:grant_id>/revoke/",
+        ProgramAccessGrantRevokeView.as_view(),
+        name="program-access-grant-revoke",
+    ),
+    path(
+        "users/<uuid:user_id>/access/",
+        UserAccessGrantListView.as_view(),
+        name="user-access-grants",
     ),
 ]
