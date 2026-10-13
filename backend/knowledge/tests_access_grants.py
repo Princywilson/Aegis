@@ -160,6 +160,15 @@ class ProgramAccessGrantTests(TestCase):
             3,
         )
 
+    def test_grants_reject_non_consumer_users_with_field_details(self):
+        response = self.create_grant(user=self.admin)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(
+            "Program access can only be granted to a Content Consumer.",
+            response.data["error"]["details"]["user_id"],
+        )
+
     def test_expired_grants_are_denied_and_regrant_creates_new_history(self):
         expired_time = timezone.now() - timedelta(minutes=1)
         self.client.force_authenticate(self.admin)

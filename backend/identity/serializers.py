@@ -17,7 +17,6 @@ class LoginSerializer(serializers.Serializer):
 
 class UserSummarySerializer(serializers.ModelSerializer):
     name = serializers.SerializerMethodField()
-    status = serializers.CharField(source="status", read_only=True)
     roles = serializers.SerializerMethodField()
 
     class Meta:
@@ -57,7 +56,7 @@ class UserCreateSerializer(serializers.Serializer):
         super().__init__(*args, **kwargs)
         request = self.context.get("request")
         if request and request.user.is_authenticated:
-            self.fields["role_ids"].queryset = Role.objects.filter(
+            self.fields["role_ids"].child_relation.queryset = Role.objects.filter(
                 organization_id=request.user.organization_id
             )
 

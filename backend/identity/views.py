@@ -216,7 +216,7 @@ class UserPagination(PageNumberPagination):
                 "data": data,
                 "meta": {
                     "page": self.page.number,
-                    "page_size": self.page_size,
+                    "page_size": self.page.paginator.per_page,
                     "total": self.page.paginator.count,
                 },
             }

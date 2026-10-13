@@ -60,6 +60,15 @@ class OrganizationAdministrationApiTests(TestCase):
         self.assertEqual(response.data["data"][0]["id"], str(self.consumer.id))
         self.assertEqual(response.data["data"][0]["roles"], ["Content Consumer"])
 
+    def test_user_list_includes_the_authenticated_administrator(self):
+        response = self.client.get("/api/v1/users/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            str(self.admin.id),
+            {item["id"] for item in response.data["data"]},
+        )
+
     def test_user_creation_assigns_roles_audits_and_returns_password_once(self):
         response = self.client.post(
             "/api/v1/users/",
