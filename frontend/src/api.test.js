@@ -64,4 +64,30 @@ describe("API client", () => {
       message: "Not allowed.",
     });
   });
+
+  it("includes field-level validation details in API error messages", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ data: { csrf_token: "csrf-token" } }))
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              error: {
+                code: "VALIDATION_ERROR",
+                message: "One or more fields are invalid.",
+                details: { user_id: ["Program access can only be granted to a Content Consumer."] },
+              },
+            },
+            400,
+          ),
+      ),
+    );
+
+    await expect(apiRequest("/program-access-grants/", { method: "POST", body: {} }))
+      .rejects.toMatchObject({
+        status: 400,
+        message: "One or more fields are invalid. user_id: Program access can only be granted to a Content Consumer.",
+      });
+  });
 });

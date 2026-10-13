@@ -57,6 +57,138 @@ describe("login page", () => {
   });
 });
 
+describe("administration and access workflows", () => {
+  it("shows the authenticated user in the organization directory on /administrator", async () => {
+    const currentUser = {
+      id: "admin-1",
+      name: "Avery Admin",
+      email: "avery@example.test",
+      organization: { id: "org-1", name: "North" },
+      roles: ["Administrator"],
+      permissions: ["USER_VIEW", "USER_CREATE", "ROLE_MANAGE"],
+    };
+    apiRequest.mockImplementation((path) => {
+      if (path === "/auth/me/") return Promise.resolve(currentUser);
+      if (path.startsWith("/users/?")) {
+        return Promise.resolve({
+          results: [{
+            id: currentUser.id,
+            name: currentUser.name,
+            email: currentUser.email,
+            status: "active",
+            roles: ["Administrator"],
+          }],
+          meta: { page: 1, page_size: 20, total: 1 },
+        });
+      }
+      if (path === "/roles/" || path === "/permissions/") return Promise.resolve([]);
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/administrator"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Organization users" })).toBeInTheDocument();
+    expect(await screen.findByText("avery@example.test")).toBeInTheDocument();
+  });
+
+  it("grants program access to a selected active Content Consumer", async () => {
+    const user = userEvent.setup();
+    apiRequest.mockImplementation((path, options = {}) => {
+      if (path === "/auth/me/") {
+        return Promise.resolve({
+          id: "admin-1",
+          name: "Avery Admin",
+          email: "avery@example.test",
+          organization: { id: "org-1", name: "North" },
+          roles: ["Administrator"],
+          permissions: ["USER_VIEW", "ACCESS_GRANT", "ACCESS_REVOKE", "PROFILE_VIEW_OWN"],
+        });
+      }
+      if (path.startsWith("/users/?role=content_consumer")) {
+        return Promise.resolve({
+          results: [{
+            id: "consumer-1",
+            name: "Casey Consumer",
+            email: "casey@example.test",
+            status: "active",
+            roles: ["Content Consumer"],
+          }],
+          meta: { page: 1, page_size: 100, total: 1 },
+        });
+      }
+      if (path === "/programs/?page_size=100") {
+        return Promise.resolve([{
+          id: "program-1",
+          name: "Reference Program",
+          status: "ACTIVE",
+        }]);
+      }
+      if (path === "/program-access-grants/" && options.method === "POST") {
+        return Promise.resolve({ id: "grant-1" });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/access"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const consumerSelect = await screen.findByLabelText("Content Consumer");
+    expect(consumerSelect).toHaveValue("");
+    await screen.findByRole("option", { name: /Casey Consumer/ });
+    await user.selectOptions(consumerSelect, "consumer-1");
+    await user.selectOptions(screen.getByLabelText("Program"), "program-1");
+    await user.click(screen.getByRole("button", { name: "Grant access" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Program access granted.");
+    expect(apiRequest).toHaveBeenCalledWith("/program-access-grants/", {
+      method: "POST",
+      body: { user_id: "consumer-1", program_id: "program-1" },
+    });
+  });
+
+  it("explains why users without the Content Consumer role are not selectable", async () => {
+    apiRequest.mockImplementation((path) => {
+      if (path === "/auth/me/") {
+        return Promise.resolve({
+          id: "admin-1",
+          name: "Avery Admin",
+          email: "avery@example.test",
+          organization: { id: "org-1", name: "North" },
+          roles: ["Administrator"],
+          permissions: ["USER_VIEW", "ACCESS_GRANT", "PROFILE_VIEW_OWN"],
+        });
+      }
+      if (path.startsWith("/users/?role=content_consumer")) {
+        return Promise.resolve({ results: [], meta: { page: 1, page_size: 100, total: 0 } });
+      }
+      if (path === "/programs/?page_size=100") return Promise.resolve([]);
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/access"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Only active users assigned the Content Consumer role can receive a program grant.",
+    );
+    expect(
+      screen.getAllByRole("link", { name: "Administration" }).some((link) =>
+        link.getAttribute("href") === "/administrator",
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("authenticated content workflow", () => {
   it("creates content and opens its details", async () => {
     const user = userEvent.setup();

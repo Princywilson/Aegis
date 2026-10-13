@@ -494,7 +494,7 @@ Use a Django shell check like this:
 For role verification:
 
 ```powershell
-.\venv\Scripts\python.exe .\backend\manage.py shell -c "from identity.models import User; from identity.rbac import effective_permission_codes; u = User.objects.get(email='admin@example.com', organization__slug='example'); print(sorted(code for code in effective_permission_codes(u)))"
+.\venv\Scripts\python.exe .\backend\manage.py shell -c "from identity.models import User; from identity.rbac import effective_permission_codes; u = User.objects.get(email='princywilson2002@gmail.com', organization__slug='myOrg'); print(sorted(code for code in effective_permission_codes(u)))"
 ```
 
 This confirms both organization membership and the effective permission set.
@@ -543,7 +543,7 @@ The current frontend exposes the following routes after login. The app uses an a
 |---|---|---|---|---|
 | `/login` | Login | Sign into AEGIS using organization slug, email, and password | Backend running, database available | Implemented |
 | `/` | Dashboard | Workspace overview, metrics, quick links | Valid session | Implemented |
-| `/administration` | Administration | Manage organization users and view seeded roles/permissions | `USER_VIEW`, `ROLE_MANAGE`, or related permissions | Partially available in current UI |
+| `/administration` (`/administrator` alias) | Administration | Manage organization users and view seeded roles/permissions | `USER_VIEW`, `ROLE_MANAGE`, or related permissions | Implemented |
 | `/content` | Content library | Create and manage content, versions, archive/publish flows | `CONTENT_VIEW` or create rights depending on action | Implemented |
 | `/programs` | Programs | Create, list, deactivate/activate programs and content assignments | `PROGRAM_VIEW` and related write permissions | Implemented |
 | `/access` | Access and grants | Manage user access grants, delivery workflows, protected content access | `ACCESS_GRANT`, `ACCESS_REVOKE`, `PROFILE_VIEW_OWN`, and/or delivery rights | Implemented |
@@ -665,9 +665,11 @@ The following scenarios are supported by the shipped code and by the repo status
 - Prerequisites: active program access grant and content assignment.
 - Starting screen: `/access` or `/viewer`.
 - Actions:
-  1. Create an access grant for a content consumer.
-  2. Attempt delivery of protected content.
-  3. Revoke or expire the grant and attempt access again.
+  1. Ensure the recipient is an active user with the `content_consumer` role. Create the user with that role from `/administrator`; an existing user's role can currently be assigned through the trusted `assign_user_role` management command.
+  2. Select the active Content Consumer from `/access` (requires `USER_VIEW`), or enter that user's UUID when the role cannot view the directory.
+  3. Create an access grant for that Content Consumer.
+  4. Attempt delivery of protected content.
+  5. Revoke or expire the grant and attempt access again.
 - Expected result: access is allowed only under active grant and assignment conditions.
 - Relevant backend result: `ProgramAccessGrant` logic and protected delivery enforcement.
 - Status: Implemented and verified in repo tests.
@@ -879,6 +881,9 @@ The project does not show a configured lint or formatting script in the frontend
 | CSRF or session issue | Missing CSRF token or stale session | Verify `/api/v1/auth/csrf/` and inspect browser cookies | Ensure the frontend is using the session auth path and the backend is started |
 | Login page works but login fails | Wrong organization slug, email, or password | Check user record and org slug in Django shell | Recreate the org/user and assign the right role |
 | Organization or role missing | Bootstrapping incomplete | `python backend\manage.py seed_rbac` and inspect the user record | Make sure the role is assigned using `assign_user_role` |
+| User creation or access grant returns a validation error | Invalid email/role input, duplicate organization email, or the selected grant recipient is not an active Content Consumer | Read the field-specific message displayed with the 400 response | Correct the highlighted input; grant access only to an active Content Consumer in the same organization |
+| No users appear in the `/access` grant dropdown | The dropdown lists only active users assigned the `content_consumer` role; organization membership by itself is not sufficient | Check the user's active status and role in `/administrator` or inspect organization-scoped role assignments | Create the user with the Content Consumer role in `/administrator`. To assign it to an existing user, an authorized operator can run `.\venv\Scripts\python.exe .\backend\manage.py assign_user_role <organization_slug> <email> content_consumer`; confirm the organization and intended role before running it |
+| Organization user is not on the first page | The directory is paginated | Use the Previous/Next controls below the user list and check the current search filter | Clear the search or move through the pages |
 | Permission denied | Missing permission or wrong role | Check effective permission codes in Django shell | Assign the proper role to the user |
 | Content upload fails | Wrong file, unsupported type, or size limit | Check upload file type and size | Use a supported upload through the app and confirm the local storage path is valid |
 | Protected viewer fails | Missing access grant, assignment, or valid published version | Check the content access grant and program assignment data | Correct the grant and published version state |

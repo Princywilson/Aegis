@@ -710,18 +710,23 @@ Required.
     "name": "John Trainer",
     "email": "john@example.com",
     "role_ids": [
-        "role_content_consumer"
+        "UUID"
     ]
 }
 ```
 
+Each `role_ids` value is the UUID of a Role in the authenticated user's organization.
+
 ### Validation
 
-- Title required
+- Name required
 - Valid email
 - Email uniqueness according to user/organization rules
 - Organization context must be valid
 - Requested roles must be assignable by the actor
+
+Validation errors use the standard error response and include field-specific
+messages in `error.details` so clients can explain rejected input.
 
 ### Response
 
@@ -1697,6 +1702,9 @@ Required.
 - Actor has `ACCESS_GRANT`.
 - Expiration, when present, is in the future.
 - No unexpired active grant already exists for the same organization/user/program.
+
+Clients with `USER_VIEW` may use the tenant-scoped user list filtered by
+`role=content_consumer&status=active` to select a valid grant recipient.
 
 ### Response
 

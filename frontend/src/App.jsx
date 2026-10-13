@@ -266,6 +266,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard user={auth.user} />} />
           <Route path="/administration" element={<Administration user={auth.user} />} />
+          <Route path="/administrator" element={<Administration user={auth.user} />} />
           <Route path="/content" element={<ContentPage user={auth.user} />} />
           <Route path="/programs" element={<ProgramsPage user={auth.user} />} />
           <Route path="/access" element={<AccessPage user={auth.user} />} />
@@ -384,7 +385,8 @@ function Administration({ user }) {
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const userParams = new URLSearchParams({ page_size: "100" });
+  const [userPage, setUserPage] = useState(1);
+  const userParams = new URLSearchParams({ page_size: "20", page: String(userPage) });
   if (search.trim()) userParams.set("search", search.trim());
   const users = useResource(
     canViewUsers ? `/users/?${userParams}` : null,
@@ -467,7 +469,10 @@ function Administration({ user }) {
               <input
                 type="search"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setUserPage(1);
+                }}
                 placeholder="Name or email"
               />
             </label>
@@ -506,6 +511,32 @@ function Administration({ user }) {
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+          {users.data?.meta && (
+            <div className="pagination">
+              <span>
+                Page {users.data.meta.page} of {Math.max(1, Math.ceil(users.data.meta.total / users.data.meta.page_size))}
+                {" · "}{users.data.meta.total} users
+              </span>
+              <div>
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={users.loading || userPage <= 1}
+                  onClick={() => setUserPage((page) => page - 1)}
+                >
+                  Previous
+                </button>
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={users.loading || userPage * users.data.meta.page_size >= users.data.meta.total}
+                  onClick={() => setUserPage((page) => page + 1)}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </section>
@@ -871,15 +902,22 @@ function ProgramsPage({ user }) {
 function AccessPage({ user }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [lookupId, setLookupId] = useState(user.id);
-  const [targetId, setTargetId] = useState(user.id);
+  const [targetId, setTargetId] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const canViewUsers = user.permissions.includes("USER_VIEW");
   const grants = useResource(
     lookupId ? `/users/${lookupId}/access/` : "/users/invalid/access/",
     refreshKey,
   );
   const programs = useResource("/programs/?page_size=100");
+  const eligibleUsers = useResource(
+    canViewUsers
+      ? "/users/?role=content_consumer&status=active&page_size=100"
+      : null,
+  );
   const programItems = programs.data?.results || programs.data || [];
+  const eligibleUserItems = eligibleUsers.data?.results || eligibleUsers.data || [];
   const canGrantOthers = user.permissions.includes("ACCESS_GRANT");
 
   async function grantAccess(event) {
@@ -894,6 +932,7 @@ function AccessPage({ user }) {
     };
     try {
       await apiRequest("/program-access-grants/", { method: "POST", body });
+      setLookupId(body.user_id);
       setRefreshKey((value) => value + 1);
       setMessage("Program access granted.");
       setError("");
@@ -916,17 +955,36 @@ function AccessPage({ user }) {
   return (
     <>
       <PageHeader eyebrow="Access control" title="Program access grants" description="Grant or revoke a user's eligibility to access a program." />
-      <ErrorMessage error={error || grants.error || programs.error} />
+      <ErrorMessage error={error || grants.error || programs.error || eligibleUsers.error} />
       {message && <p className="notice success" role="status">{message}</p>}
       {canGrantOthers && (
         <section className="panel">
           <h2>Grant program access</h2>
-          <form className="form-grid" onSubmit={grantAccess}>
-            <label>User ID<input required value={targetId} onChange={(event) => setTargetId(event.target.value)} placeholder="User UUID" /></label>
+          <form className="form-grid grant-form" onSubmit={grantAccess}>
+            {canViewUsers ? (
+              <label>Content Consumer
+                <select required value={targetId} onChange={(event) => setTargetId(event.target.value)}>
+                  <option value="" disabled>Select a user</option>
+                  {eligibleUserItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name ? `${item.name} — ${item.email}` : item.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <label>User ID<input required value={targetId} onChange={(event) => setTargetId(event.target.value)} placeholder="Content Consumer UUID" /></label>
+            )}
             <label>Program<select name="program_id" required defaultValue=""><option value="" disabled>Select a program</option>{programItems.filter((item) => item.status === "ACTIVE").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <label>Expires at (optional)<input name="expires_at" type="datetime-local" /></label>
-            <div><button className="primary">Grant access</button></div>
+            <button className="primary grant-submit" disabled={eligibleUsers.loading || (canViewUsers && eligibleUserItems.length === 0)}>Grant access</button>
           </form>
+          {canViewUsers && !eligibleUsers.loading && eligibleUserItems.length === 0 && (
+            <p className="fine-print" role="status">
+              No eligible users are available. Only active users assigned the Content Consumer role can receive a program grant.
+              Create a user with that role from <Link to="/administrator">Administration</Link>, or ask an organization role manager to assign it to an existing user.
+            </p>
+          )}
         </section>
       )}
       <section className="panel">
@@ -939,7 +997,7 @@ function AccessPage({ user }) {
             {!grantItems.length && <tr><td colSpan="5" className="empty-cell">No access grants found.</td></tr>}
           </tbody></table></div>
         )}
-        {canGrantOthers && <p className="fine-print">User discovery is not available in the current API. Enter a user ID supplied through an authorized workflow.</p>}
+        {canGrantOthers && !canViewUsers && <p className="fine-print">Enter the ID of an active Content Consumer in your organization.</p>}
       </section>
     </>
   );

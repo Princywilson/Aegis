@@ -19,6 +19,17 @@ async function readJson(response) {
   }
 }
 
+function formatErrorDetails(details) {
+  if (!details || typeof details !== "object" || Array.isArray(details)) return [];
+
+  return Object.entries(details).flatMap(([field, value]) => {
+    const messages = Array.isArray(value) ? value : [value];
+    return messages
+      .filter((message) => typeof message === "string" || typeof message === "number")
+      .map((message) => `${field}: ${message}`);
+  });
+}
+
 export async function refreshCsrfToken() {
   const response = await fetch(`${API_ROOT}/auth/csrf/`, {
     credentials: "include",
@@ -62,8 +73,10 @@ export async function apiRequest(path, options = {}) {
 
   const payload = await readJson(response);
   if (!response.ok) {
+    const message = payload?.error?.message || payload?.detail || "The request could not be completed.";
+    const details = formatErrorDetails(payload?.error?.details);
     throw new ApiError(
-      payload?.error?.message || payload?.detail || "The request could not be completed.",
+      [message, ...details].join(" "),
       response.status,
       payload?.error?.code,
     );
