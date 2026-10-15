@@ -372,6 +372,40 @@ function Metric({ label, value }) {
   );
 }
 
+function Modal({ title, onClose, children }) {
+  useEffect(() => {
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        aria-labelledby="modal-title"
+        aria-modal="true"
+        className="modal-panel"
+        role="dialog"
+      >
+        <div className="section-heading">
+          <h2 id="modal-title">{title}</h2>
+          <button className="icon-button modal-close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
+}
+
 function Administration({ user }) {
   const canViewUsers = user.permissions.includes("USER_VIEW");
   const canCreateUsers = user.permissions.includes("USER_CREATE");
@@ -386,6 +420,8 @@ function Administration({ user }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [userPage, setUserPage] = useState(1);
+  const [activeTab, setActiveTab] = useState(canViewUsers ? "users" : "roles");
+  const [createOpen, setCreateOpen] = useState(false);
   const userParams = new URLSearchParams({ page_size: "20", page: String(userPage) });
   if (search.trim()) userParams.set("search", search.trim());
   const users = useResource(
@@ -418,6 +454,7 @@ function Administration({ user }) {
       setForm({ name: "", email: "" });
       setSelectedRoles([]);
       setRefreshKey((key) => key + 1);
+      setCreateOpen(false);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -457,13 +494,46 @@ function Administration({ user }) {
           <code>{temporaryPassword}</code>
         </section>
       )}
-      {canViewUsers ? (
-        <section className="panel">
+      <div className="tab-list" role="tablist" aria-label="Administration sections">
+        {canViewUsers && (
+          <button
+            aria-controls="organization-users-panel"
+            aria-selected={activeTab === "users"}
+            className={activeTab === "users" ? "tab-button active" : "tab-button"}
+            id="organization-users-tab"
+            onClick={() => setActiveTab("users")}
+            role="tab"
+          >
+            Organization users
+          </button>
+        )}
+        {canManageRoles && (
+          <button
+            aria-controls="roles-permissions-panel"
+            aria-selected={activeTab === "roles"}
+            className={activeTab === "roles" ? "tab-button active" : "tab-button"}
+            id="roles-permissions-tab"
+            onClick={() => setActiveTab("roles")}
+            role="tab"
+          >
+            Roles &amp; Permissions
+          </button>
+        )}
+      </div>
+      {activeTab === "users" && canViewUsers ? (
+        <section
+          aria-labelledby="organization-users-tab"
+          className="panel"
+          id="organization-users-panel"
+          role="tabpanel"
+        >
           <div className="section-heading">
             <div>
               <h2>Organization users</h2>
               <p className="muted">User data and filters are scoped to this organization.</p>
             </div>
+          </div>
+          <div className="admin-toolbar">
             <label>
               Search
               <input
@@ -476,6 +546,11 @@ function Administration({ user }) {
                 placeholder="Name or email"
               />
             </label>
+            {canCreateUsers && (
+              <button className="primary" onClick={() => setCreateOpen(true)}>
+                + Create User
+              </button>
+            )}
           </div>
           {users.loading ? (
             <p className="muted">Loading users…</p>
@@ -495,7 +570,7 @@ function Administration({ user }) {
                       <td>
                         {canUpdateUsers && (
                           <button
-                            className="button secondary"
+                            className="secondary"
                             type="button"
                             disabled={busy || (item.status === "active" && !canDeactivateUsers)}
                             onClick={() => updateStatus(item)}
@@ -507,7 +582,7 @@ function Administration({ user }) {
                     </tr>
                   ))}
                   {!userItems.length && (
-                    <tr><td colSpan="5" className="muted">No users found.</td></tr>
+                    <tr><td colSpan="5" className="empty-cell">No users found.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -540,16 +615,56 @@ function Administration({ user }) {
             </div>
           )}
         </section>
+      ) : activeTab === "roles" && canManageRoles ? (
+        <section
+          aria-labelledby="roles-permissions-tab"
+          className="panel"
+          id="roles-permissions-panel"
+          role="tabpanel"
+        >
+          <h2>Roles &amp; Permissions</h2>
+          {roles.loading ? <p className="muted">Loading roles…</p> : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Role name</th><th>Permissions</th></tr></thead>
+                <tbody>
+                  {roleItems.map((role) => (
+                    <tr key={role.id}>
+                      <td><strong>{role.name}</strong><br /><code>{role.code}</code></td>
+                      <td>
+                        {(role.permissions || []).map((permission) => permission.name).join(", ") || "No permissions"}
+                      </td>
+                    </tr>
+                  ))}
+                  {!roleItems.length && <tr><td colSpan="2" className="empty-cell">No roles found.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <details className="permission-catalogue">
+            <summary>Permission catalogue · all available system permissions ({permissionItems.length})</summary>
+            <p className="muted">
+              This is the reference list of capabilities available to roles. The table above shows the permissions actually assigned to each role.
+            </p>
+            <ul className="permission-list">
+              {permissionItems.map((permission) => (
+                <li key={permission.code}>
+                  <code>{permission.code}</code> — {permission.name}
+                  {permission.description && <span className="muted"> · {permission.description}</span>}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
       ) : (
         <section className="panel">
-          <h2>User directory unavailable</h2>
-          <p className="muted">Your role does not include permission to view organization users.</p>
+          <h2>Administration section unavailable</h2>
+          <p className="muted">Your role does not include permission to view this section.</p>
         </section>
       )}
-      {canCreateUsers && (
-        <section className="panel">
-          <h2>Create user</h2>
-          <form className="form-grid" onSubmit={createUser}>
+      {createOpen && canCreateUsers && (
+        <Modal title="Create user" onClose={() => setCreateOpen(false)}>
+          <form className="stack" onSubmit={createUser}>
             <label>
               Full name
               <input
@@ -569,51 +684,41 @@ function Administration({ user }) {
               />
             </label>
             {canManageRoles && (
-              <fieldset>
-                <legend>Roles</legend>
-                {roleItems.map((role) => (
-                  <label key={role.id} className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedRoles.includes(role.id)}
-                      onChange={(event) => setSelectedRoles((current) =>
-                        event.target.checked
-                          ? [...current, role.id]
-                          : current.filter((id) => id !== role.id))}
-                    />
-                    {role.name}
-                  </label>
-                ))}
-              </fieldset>
+              <div className="role-field">
+                <span className="field-label">Roles</span>
+                <details className="multi-select-dropdown">
+                  <summary>
+                    {selectedRoles.length
+                      ? `${selectedRoles.length} role${selectedRoles.length === 1 ? "" : "s"} selected`
+                      : "Select roles"}
+                  </summary>
+                  <div className="dropdown-options">
+                    {roleItems.map((role) => (
+                      <label key={role.id} className="checkbox-label">
+                        <input
+                          checked={selectedRoles.includes(role.id)}
+                          onChange={(event) => setSelectedRoles((current) =>
+                            event.target.checked
+                              ? [...current, role.id]
+                              : current.filter((id) => id !== role.id))}
+                          type="checkbox"
+                        />
+                        {role.name}
+                      </label>
+                    ))}
+                  </div>
+                </details>
+                <span className="fine-print">Select one or more roles.</span>
+              </div>
             )}
-            <button className="button primary" type="submit" disabled={busy}>
-              {busy ? "Creating…" : "Create user"}
-            </button>
+            <div className="modal-actions">
+              <button className="secondary" type="button" onClick={() => setCreateOpen(false)}>Cancel</button>
+              <button className="primary" type="submit" disabled={busy}>
+                {busy ? "Creating…" : "Create user"}
+              </button>
+            </div>
           </form>
-        </section>
-      )}
-      {canManageRoles && (
-        <section className="panel">
-          <h2>Roles and permissions</h2>
-          <div className="card-grid">
-            {roleItems.map((role) => (
-              <article className="metric-card" key={role.id}>
-                <strong>{role.name}</strong>
-                <span>{role.code}</span>
-              </article>
-            ))}
-          </div>
-          <details>
-            <summary>Permission catalogue ({permissionItems.length})</summary>
-            <ul className="permission-list">
-              {permissionItems.map((permission) => (
-                <li key={permission.code}>
-                  <code>{permission.code}</code> — {permission.name}
-                </li>
-              ))}
-            </ul>
-          </details>
-        </section>
+        </Modal>
       )}
       <p className="muted">Organization profile/configuration editing is not specified by the current API contract.</p>
     </>
@@ -623,6 +728,7 @@ function Administration({ user }) {
 function ContentPage({ user }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedId, setSelectedId] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [form, setForm] = useState({ title: "", description: "" });
@@ -655,6 +761,7 @@ function ContentPage({ user }) {
       setSelectedId(created.id);
       setRefreshKey((value) => value + 1);
       setMessage("Content created.");
+      setCreateOpen(false);
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -714,23 +821,16 @@ function ContentPage({ user }) {
       />
       <ErrorMessage error={error || content.error || (selectedId ? versions.error : "")} />
       {message && <p className="notice success" role="status">{message}</p>}
-      {canCreate && (
-        <section className="panel">
-          <h2>Create content</h2>
-          <form className="form-grid" onSubmit={createContent}>
-            <label>Title<input required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-            <label className="wide">Description<textarea rows="2" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-            <div><button className="primary">Create content</button></div>
-          </form>
-        </section>
-      )}
       <section className="panel">
         <div className="section-heading">
           <h2>All content</h2>
-          <form className="inline-form" onSubmit={(event) => { event.preventDefault(); setSearch(searchValue.trim()); }}>
-            <input aria-label="Search content" placeholder="Search content…" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} />
-            <button className="secondary">Search</button>
-          </form>
+          <div className="content-toolbar">
+            <form className="inline-form" onSubmit={(event) => { event.preventDefault(); setSearch(searchValue.trim()); }}>
+              <input aria-label="Search content" placeholder="Search content…" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} />
+              <button className="secondary">Search</button>
+            </form>
+            {canCreate && <button className="primary" onClick={() => setCreateOpen(true)}>+ Create content</button>}
+          </div>
         </div>
         {content.loading ? <p className="muted">Loading content…</p> : (
           <div className="table-wrap">
@@ -778,6 +878,18 @@ function ContentPage({ user }) {
           )}
         </section>
       )}
+      {createOpen && canCreate && (
+        <Modal title="Create content" onClose={() => setCreateOpen(false)}>
+          <form className="stack" onSubmit={createContent}>
+            <label>Title<input required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
+            <label>Description<textarea rows="3" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+            <div className="modal-actions">
+              <button className="secondary" type="button" onClick={() => setCreateOpen(false)}>Cancel</button>
+              <button className="primary">Create content</button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </>
   );
 }
@@ -785,6 +897,7 @@ function ContentPage({ user }) {
 function ProgramsPage({ user }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedId, setSelectedId] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ name: "", description: "" });
@@ -806,6 +919,7 @@ function ProgramsPage({ user }) {
       setRefreshKey((value) => value + 1);
       setMessage("Program created.");
       setError("");
+      setCreateOpen(false);
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -854,19 +968,14 @@ function ProgramsPage({ user }) {
       <PageHeader eyebrow="Programs" title="Program management" description="Group content and control when it is available." />
       <ErrorMessage error={error || programs.error || (selectedId ? assignments.error : "")} />
       {message && <p className="notice success" role="status">{message}</p>}
-      {user.permissions.includes("PROGRAM_CREATE") && (
-        <section className="panel">
-          <h2>Create a program</h2>
-          <form className="form-grid" onSubmit={submitProgram}>
-            <label>Name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
-            <label>Description<textarea rows="2" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-            <div><button className="primary">Create program</button></div>
-          </form>
-        </section>
-      )}
       <div className="split-layout">
         <section className="panel">
-          <h2>Programs</h2>
+          <div className="section-heading">
+            <h2>Programs</h2>
+            {user.permissions.includes("PROGRAM_CREATE") && (
+              <button className="primary" onClick={() => setCreateOpen(true)}>+ Create program</button>
+            )}
+          </div>
           {programs.loading ? <p className="muted">Loading programs…</p> : (
             <div className="program-list">{programItems.map((program) => (
               <button className={`program-item ${selectedId === program.id ? "chosen" : ""}`} key={program.id} onClick={() => setSelectedId(program.id)}>
@@ -895,21 +1004,35 @@ function ProgramsPage({ user }) {
           </section>
         )}
       </div>
+      {createOpen && user.permissions.includes("PROGRAM_CREATE") && (
+        <Modal title="Create a program" onClose={() => setCreateOpen(false)}>
+          <form className="stack" onSubmit={submitProgram}>
+            <label>Name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+            <label>Description<textarea rows="3" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+            <div className="modal-actions">
+              <button className="secondary" type="button" onClick={() => setCreateOpen(false)}>Cancel</button>
+              <button className="primary">Create program</button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </>
   );
 }
 
 function AccessPage({ user }) {
   const [refreshKey, setRefreshKey] = useState(0);
-  const [lookupId, setLookupId] = useState(user.id);
+  const [grantPage, setGrantPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
   const [targetId, setTargetId] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const canViewUsers = user.permissions.includes("USER_VIEW");
-  const grants = useResource(
-    lookupId ? `/users/${lookupId}/access/` : "/users/invalid/access/",
-    refreshKey,
-  );
+  const canGrantOthers = user.permissions.includes("ACCESS_GRANT");
+  const grantPath = canGrantOthers
+    ? `/program-access-grants/?page=${grantPage}&page_size=50`
+    : `/users/${user.id}/access/`;
+  const grants = useResource(grantPath, refreshKey);
   const programs = useResource("/programs/?page_size=100");
   const eligibleUsers = useResource(
     canViewUsers
@@ -918,7 +1041,6 @@ function AccessPage({ user }) {
   );
   const programItems = programs.data?.results || programs.data || [];
   const eligibleUserItems = eligibleUsers.data?.results || eligibleUsers.data || [];
-  const canGrantOthers = user.permissions.includes("ACCESS_GRANT");
 
   async function grantAccess(event) {
     event.preventDefault();
@@ -932,10 +1054,11 @@ function AccessPage({ user }) {
     };
     try {
       await apiRequest("/program-access-grants/", { method: "POST", body });
-      setLookupId(body.user_id);
+      setGrantPage(1);
       setRefreshKey((value) => value + 1);
       setMessage("Program access granted.");
       setError("");
+      setCreateOpen(false);
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -959,8 +1082,43 @@ function AccessPage({ user }) {
       {message && <p className="notice success" role="status">{message}</p>}
       {canGrantOthers && (
         <section className="panel">
-          <h2>Grant program access</h2>
-          <form className="form-grid grant-form" onSubmit={grantAccess}>
+          <div className="section-heading">
+            <div>
+              <h2>Program access</h2>
+              <p className="muted">Organization-scoped grants for users and their assigned programs.</p>
+            </div>
+            <button className="primary" onClick={() => setCreateOpen(true)}>+ Grant access</button>
+          </div>
+          {canViewUsers && !eligibleUsers.loading && eligibleUserItems.length === 0 && (
+            <p className="fine-print" role="status">
+              No eligible users are available. Only active users assigned the Content Consumer role can receive a program grant.
+              Create a user with that role from <Link to="/administrator">Administration</Link>, or ask an organization role manager to assign it to an existing user.
+            </p>
+          )}
+        </section>
+      )}
+      <section className="panel">
+        <div className="section-heading"><h2>{canGrantOthers ? "Organization program access" : "My program grants"}</h2></div>
+        {grants.loading ? <p className="muted">Loading grants…</p> : (
+          <div className="table-wrap"><table><thead><tr><th>User</th><th>Program</th><th>Status</th><th>Granted</th><th>Expires</th><th /></tr></thead><tbody>
+            {grantItems.map((grant) => <tr key={grant.id}><td>{grant.user_name || "Unnamed user"}</td><td>{grant.program_name || "Unnamed program"}</td><td><StatusBadge value={grant.status} /></td><td>{formatDate(grant.granted_at)}</td><td>{grant.expires_at ? formatDate(grant.expires_at) : "Never"}</td><td>{grant.status === "ACTIVE" && user.permissions.includes("ACCESS_REVOKE") && <button className="text-button danger-text" onClick={() => revoke(grant.id)}>Revoke</button>}</td></tr>)}
+            {!grantItems.length && <tr><td colSpan="6" className="empty-cell">No access grants found.</td></tr>}
+          </tbody></table></div>
+        )}
+        {grants.data?.meta && (
+          <div className="pagination">
+            <span>{grants.data.meta.total} grants</span>
+            <div>
+              <button className="secondary" disabled={grantPage <= 1} onClick={() => setGrantPage((page) => page - 1)}>Previous</button>
+              <span>Page {grants.data.meta.page}</span>
+              <button className="secondary" disabled={grantPage * grants.data.meta.page_size >= grants.data.meta.total} onClick={() => setGrantPage((page) => page + 1)}>Next</button>
+            </div>
+          </div>
+        )}
+      </section>
+      {createOpen && canGrantOthers && (
+        <Modal title="Grant program access" onClose={() => setCreateOpen(false)}>
+          <form className="stack" onSubmit={grantAccess}>
             {canViewUsers ? (
               <label>Content Consumer
                 <select required value={targetId} onChange={(event) => setTargetId(event.target.value)}>
@@ -977,28 +1135,13 @@ function AccessPage({ user }) {
             )}
             <label>Program<select name="program_id" required defaultValue=""><option value="" disabled>Select a program</option>{programItems.filter((item) => item.status === "ACTIVE").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <label>Expires at (optional)<input name="expires_at" type="datetime-local" /></label>
-            <button className="primary grant-submit" disabled={eligibleUsers.loading || (canViewUsers && eligibleUserItems.length === 0)}>Grant access</button>
+            <div className="modal-actions">
+              <button className="secondary" type="button" onClick={() => setCreateOpen(false)}>Cancel</button>
+              <button className="primary" disabled={eligibleUsers.loading || (canViewUsers && eligibleUserItems.length === 0)}>Grant access</button>
+            </div>
           </form>
-          {canViewUsers && !eligibleUsers.loading && eligibleUserItems.length === 0 && (
-            <p className="fine-print" role="status">
-              No eligible users are available. Only active users assigned the Content Consumer role can receive a program grant.
-              Create a user with that role from <Link to="/administrator">Administration</Link>, or ask an organization role manager to assign it to an existing user.
-            </p>
-          )}
-        </section>
+        </Modal>
       )}
-      <section className="panel">
-        <div className="section-heading"><h2>{lookupId === user.id ? "My program grants" : "User program grants"}</h2>
-          {canGrantOthers && <form className="inline-form" onSubmit={(event) => { event.preventDefault(); setLookupId(event.currentTarget.elements.user_id.value.trim()); }}><input aria-label="Find grants by user ID" name="user_id" value={lookupId} onChange={(event) => setLookupId(event.target.value)} /><button className="secondary">Find</button></form>}
-        </div>
-        {grants.loading ? <p className="muted">Loading grants…</p> : (
-          <div className="table-wrap"><table><thead><tr><th>Program</th><th>Status</th><th>Granted</th><th>Expires</th><th /></tr></thead><tbody>
-            {grantItems.map((grant) => <tr key={grant.id}><td>{programItems.find((item) => item.id === grant.program_id)?.name || grant.program_id}</td><td><StatusBadge value={grant.status} /></td><td>{formatDate(grant.granted_at)}</td><td>{grant.expires_at ? formatDate(grant.expires_at) : "Never"}</td><td>{grant.status === "ACTIVE" && user.permissions.includes("ACCESS_REVOKE") && <button className="text-button danger-text" onClick={() => revoke(grant.id)}>Revoke</button>}</td></tr>)}
-            {!grantItems.length && <tr><td colSpan="5" className="empty-cell">No access grants found.</td></tr>}
-          </tbody></table></div>
-        )}
-        {canGrantOthers && !canViewUsers && <p className="fine-print">Enter the ID of an active Content Consumer in your organization.</p>}
-      </section>
     </>
   );
 }
@@ -1007,6 +1150,7 @@ function ViewerPage() {
   const [contentId, setContentId] = useState("");
   const [programId, setProgramId] = useState("");
   const [access, setAccess] = useState(null);
+  const [fullWindow, setFullWindow] = useState(false);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [imageUrl, setImageUrl] = useState("");
@@ -1061,7 +1205,13 @@ function ViewerPage() {
           URL.revokeObjectURL(nextUrl);
         }
       } catch (requestError) {
-        if (active) setError(requestError.message);
+        if (active) {
+          setError(
+            requestError.status === 415
+              ? "This file format is not yet supported in the protected viewer. PowerPoint and video rendering are planned for future development; use PDF or image content for now."
+              : requestError.message,
+          );
+        }
       } finally {
         if (active) setBusy(false);
       }
@@ -1085,8 +1235,22 @@ function ViewerPage() {
         </form>
       </section>
       {access && (
-        <section className="panel viewer-panel">
-          <div className="section-heading"><div><p className="eyebrow">Protected representation</p><h2>{contentItems.find((item) => item.id === access.content_id)?.title || "Content"}</h2></div><span className="page-counter">Page {page} of {pageCount}</span></div>
+        <section className={`panel viewer-panel${fullWindow ? " viewer-fullscreen" : ""}`}>
+          <div className="section-heading">
+            <div className="viewer-heading">
+              {fullWindow && <Link className="secondary" to="/content">Back to content library</Link>}
+              <div>
+                <p className="eyebrow">Protected representation</p>
+                <h2>{contentItems.find((item) => item.id === access.content_id)?.title || "Content"}</h2>
+              </div>
+            </div>
+            <div className="viewer-heading-actions">
+              <span className="page-counter">Page {page} of {pageCount}</span>
+              <button className="secondary" onClick={() => setFullWindow((value) => !value)}>
+                {fullWindow ? "Exit full window" : "Open full window"}
+              </button>
+            </div>
+          </div>
           <div className="viewer-canvas">{busy ? <p className="muted">Rendering protected page…</p> : imageUrl ? <img src={imageUrl} alt={`Watermarked content page ${page}`} /> : <p className="muted">Page preview is unavailable.</p>}</div>
           <div className="viewer-controls"><button className="secondary" disabled={page <= 1 || busy} onClick={() => setPage((value) => value - 1)}>Previous page</button><button className="secondary" disabled={page >= pageCount || busy} onClick={() => setPage((value) => value + 1)}>Next page</button></div>
           <p className="fine-print">This rendered preview is watermarked. Screenshots and saving a rendered representation cannot be prevented.</p>
@@ -1101,10 +1265,10 @@ function AccountabilityPage({ endpoint, title }) {
   const resource = useResource(`/${endpoint}?page_size=50`, refreshKey);
   const items = resource.data?.results || resource.data || [];
   const headers = endpoint === "audits/"
-    ? ["Action", "Resource", "Actor", "Occurred"]
+    ? ["Action", "Resource", "User", "Occurred"]
     : endpoint === "security-events/"
-      ? ["Event", "Severity", "User", "Occurred"]
-      : ["Event", "User", "Content", "Occurred"];
+      ? ["Event", "Severity", "User", "Resource", "Occurred"]
+      : ["Event", "User", "Content", "Program", "Occurred"];
   return (
     <>
       <PageHeader eyebrow="Accountability" title={title} description="Read-only, organization-scoped records from trusted backend workflows.">
@@ -1113,13 +1277,13 @@ function AccountabilityPage({ endpoint, title }) {
       <ErrorMessage error={resource.error} />
       <section className="panel"><div className="table-wrap"><table><thead><tr>{headers.map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>
         {items.map((item) => endpoint === "audits/" ? (
-          <tr key={item.id}><td>{item.action}</td><td>{item.resource_type} · {item.resource_id}</td><td>{item.actor_user_id || "System"}</td><td>{formatDate(item.occurred_at)}</td></tr>
+          <tr key={item.id}><td>{item.action}</td><td>{item.resource_name || item.resource_type.replaceAll("_", " ")}</td><td>{item.actor_user_name || "System"}</td><td>{formatDate(item.occurred_at)}</td></tr>
         ) : endpoint === "security-events/" ? (
-          <tr key={item.id}><td>{item.event_type}</td><td><StatusBadge value={item.severity} /></td><td>{item.user_id || "System"}</td><td>{formatDate(item.occurred_at)}</td></tr>
+          <tr key={item.id}><td>{item.event_type}</td><td><StatusBadge value={item.severity} /></td><td>{item.user_name || "System"}</td><td>{item.resource_name || item.resource_type?.replaceAll("_", " ") || "—"}</td><td>{formatDate(item.occurred_at)}</td></tr>
         ) : (
-          <tr key={item.id}><td>{item.event_type}</td><td>{item.user_id || "System"}</td><td>{item.content_id || "—"}</td><td>{formatDate(item.occurred_at)}</td></tr>
+          <tr key={item.id}><td>{item.event_type}</td><td>{item.user_name || "System"}</td><td>{item.content_title || "—"}</td><td>{item.program_name || "—"}</td><td>{formatDate(item.occurred_at)}</td></tr>
         ))}
-        {!resource.loading && !items.length && <tr><td colSpan="4" className="empty-cell">No records found.</td></tr>}
+        {!resource.loading && !items.length && <tr><td colSpan={headers.length} className="empty-cell">No records found.</td></tr>}
       </tbody></table></div></section>
     </>
   );
@@ -1142,7 +1306,7 @@ function AnalyticsPage() {
           <section className="panel"><h2>Daily access frequency</h2><DataTable columns={["Date", "Views"]} rows={data.access_frequency.map((item) => [item.date, item.views])} /></section>
           <section className="panel"><h2>Version usage</h2><DataTable columns={["Content", "Version", "Views"]} rows={data.version_usage.map((item) => [item.content_title, `v${item.version_number}`, item.views])} /></section>
         </div>
-        <section className="panel"><h2>Recent activity</h2><DataTable columns={["Event", "Content", "Occurred"]} rows={data.recent_activity.map((item) => [item.event_type, item.content_id, formatDate(item.occurred_at)])} /></section>
+        <section className="panel"><h2>Recent activity</h2><DataTable columns={["Event", "User", "Content", "Program", "Occurred"]} rows={data.recent_activity.map((item) => [item.event_type, item.user_name || "System", item.content_title || "—", item.program_name || "—", formatDate(item.occurred_at)])} /></section>
       </>}
       {resource.loading && <p className="muted">Loading analytics…</p>}
     </>
@@ -1157,8 +1321,8 @@ function ReportsPage() {
     <>
       <PageHeader eyebrow="Insights" title="Content access report" description="A record is created for each successful content open." />
       <ErrorMessage error={resource.error} />
-      <section className="panel"><div className="table-wrap"><table><thead><tr><th>Content</th><th>Version</th><th>Program ID</th><th>User ID</th><th>Accessed</th></tr></thead><tbody>
-        {records.map((record) => <tr key={record.id}><td>{record.content_title}</td><td>v{record.version_number}</td><td>{record.program_id || "—"}</td><td>{record.user_id}</td><td>{formatDate(record.accessed_at)}</td></tr>)}
+      <section className="panel"><div className="table-wrap"><table><thead><tr><th>Content</th><th>Version</th><th>Program</th><th>User</th><th>Accessed</th></tr></thead><tbody>
+        {records.map((record) => <tr key={record.id}><td>{record.content_title}</td><td>v{record.version_number}</td><td>{record.program_name || "—"}</td><td>{record.user_name || "Unknown user"}</td><td>{formatDate(record.accessed_at)}</td></tr>)}
         {!resource.loading && !records.length && <tr><td colSpan="5" className="empty-cell">No access records found.</td></tr>}
       </tbody></table></div>
       {resource.data?.meta && <div className="pagination"><span>{resource.data.meta.total} records</span><div><button className="secondary" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</button><span>Page {page}</span><button className="secondary" disabled={page * resource.data.meta.page_size >= resource.data.meta.total} onClick={() => setPage((value) => value + 1)}>Next</button></div></div>}

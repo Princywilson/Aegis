@@ -157,6 +157,9 @@ class ContentDeliveryApiTests(TestCase):
         )
 
     def test_authorized_consumer_receives_only_rendered_pdf_pages(self):
+        self.consumer.first_name = "Casey"
+        self.consumer.last_name = "Consumer"
+        self.consumer.save(update_fields=["first_name", "last_name"])
         started = self.start_access()
         self.assertEqual(started.status_code, 201)
         access = ContentAccess.objects.get(pk=started.data["data"]["access_id"])
@@ -186,7 +189,8 @@ class ContentDeliveryApiTests(TestCase):
             2,
         )
         watermark = build_watermark_text(access)
-        self.assertIn("c***@example.com", watermark)
+        self.assertIn("Casey Consumer", watermark)
+        self.assertNotIn("consumer@example.com", watermark)
         self.assertIn("Delivery Organization", watermark)
         self.assertIn("UTC", watermark)
         self.assertIn(f"Content {str(self.content.id).split('-')[0]} v1", watermark)

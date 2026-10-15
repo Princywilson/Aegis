@@ -169,6 +169,52 @@ class ProgramAccessGrantTests(TestCase):
             response.data["error"]["details"]["user_id"],
         )
 
+    def test_administrator_can_list_organization_grants_with_user_and_program_names(self):
+        self.consumer.first_name = "Casey"
+        self.consumer.last_name = "Consumer"
+        self.consumer.save(update_fields=["first_name", "last_name"])
+        ProgramAccessGrant.objects.create(
+            organization=self.organization,
+            user=self.consumer,
+            program=self.program,
+            granted_by=self.admin,
+        )
+        other_program = Program.objects.create(
+            organization=self.other_organization,
+            name="Other tenant program",
+            created_by=self.other_consumer,
+        )
+        ProgramAccessGrant.objects.create(
+            organization=self.other_organization,
+            user=self.other_consumer,
+            program=other_program,
+            granted_by=self.other_consumer,
+        )
+
+        self.client.force_authenticate(self.admin)
+        response = self.client.get("/api/v1/program-access-grants/?page_size=10")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["meta"]["total"], 1)
+        self.assertEqual(response.data["data"][0]["user_name"], "Casey Consumer")
+        self.assertEqual(
+            response.data["data"][0]["program_name"],
+            "Authorized Program",
+        )
+
+        self.client.force_authenticate(self.consumer)
+        denied = self.client.get("/api/v1/program-access-grants/")
+        self.assertEqual(denied.status_code, 403)
+
+    def test_organization_grant_list_rejects_invalid_pagination(self):
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get(
+            "/api/v1/program-access-grants/?page_size=not-a-number"
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     def test_expired_grants_are_denied_and_regrant_creates_new_history(self):
         expired_time = timezone.now() - timedelta(minutes=1)
         self.client.force_authenticate(self.admin)

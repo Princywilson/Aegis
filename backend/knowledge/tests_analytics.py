@@ -30,6 +30,9 @@ class ContentAnalyticsApiTests(TestCase):
         )
         self.admin = self._user("admin@example.com", self.organization)
         self.consumer = self._user("consumer@example.com", self.organization)
+        self.consumer.first_name = "Casey"
+        self.consumer.last_name = "Consumer"
+        self.consumer.save(update_fields=["first_name", "last_name"])
         self.colleague = self._user("colleague@example.com", self.organization)
         self.manager = self._user("manager@example.com", self.organization)
         self.other_admin = self._user(
@@ -253,6 +256,14 @@ class ContentAnalyticsApiTests(TestCase):
                 str(self.own_access_two.id),
             },
         )
+        access_item = next(
+            item
+            for item in consumer_response.data["data"]
+            if item["id"] == str(self.own_access_one.id)
+        )
+        self.assertEqual(access_item["user_name"], "Casey Consumer")
+        self.assertEqual(access_item["program_name"], "Assigned")
+        self.assertEqual(access_item["content_title"], "Assigned content")
 
         organization_response = self._get(
             self.admin,
@@ -317,3 +328,7 @@ class ContentAnalyticsApiTests(TestCase):
             response.data["data"]["recent_activity"][0]["id"],
             str(opened_event.id),
         )
+        recent = response.data["data"]["recent_activity"][0]
+        self.assertEqual(recent["user_name"], "Casey Consumer")
+        self.assertEqual(recent["content_title"], "Assigned content")
+        self.assertEqual(recent["program_name"], "Assigned")

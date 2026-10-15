@@ -6,6 +6,7 @@ from rest_framework.test import APIClient
 
 from identity.models import Organization, User
 from identity.rbac import assign_role_from_trusted_command, seed_organization_roles
+from knowledge.models import Content, Program
 
 from .models import ActivityEvent, AuditRecord, SecurityEvent
 
@@ -45,6 +46,12 @@ class AccountabilityApiTests(TestCase):
             password="test-password",
             organization=self.other_organization,
         )
+        self.consumer.first_name = "Casey"
+        self.consumer.last_name = "Consumer"
+        self.consumer.save(update_fields=["first_name", "last_name"])
+        self.admin.first_name = "Avery"
+        self.admin.last_name = "Admin"
+        self.admin.save(update_fields=["first_name", "last_name"])
 
         roles = seed_organization_roles(self.organization)
         other_roles = seed_organization_roles(self.other_organization)
@@ -62,6 +69,16 @@ class AccountabilityApiTests(TestCase):
             other_roles["administrator"],
         )
 
+        self.content = Content.objects.create(
+            organization=self.organization,
+            title="Reference content",
+            created_by=self.admin,
+        )
+        self.program = Program.objects.create(
+            organization=self.organization,
+            name="Reference program",
+            created_by=self.admin,
+        )
         self.consumer_activity = self._create_activity(self.consumer)
         self.colleague_activity = self._create_activity(self.colleague)
         self.other_activity = self._create_activity(
@@ -73,6 +90,8 @@ class AccountabilityApiTests(TestCase):
             user=self.consumer,
             event_type="ACCESS_DENIED",
             severity=SecurityEvent.Severity.MEDIUM,
+            resource_type="content",
+            resource_id=self.content.id,
         )
         self.platform_security_event = SecurityEvent.objects.create(
             event_type="LOGIN_FAILURE",
@@ -89,7 +108,7 @@ class AccountabilityApiTests(TestCase):
             actor_user=self.admin,
             action=AuditRecord.Action.CONTENT_CREATED,
             resource_type="content",
-            resource_id=uuid.uuid4(),
+            resource_id=self.content.id,
             new_values={"title": "Example"},
         )
         self.other_audit_record = AuditRecord.objects.create(
@@ -106,6 +125,8 @@ class AccountabilityApiTests(TestCase):
             organization=organization or user.organization,
             user=user,
             event_type=ActivityEvent.EventType.VIEWER_OPENED,
+            content=self.content if user == self.consumer else None,
+            program=self.program if user == self.consumer else None,
         )
 
     def _get(self, user, path):
@@ -121,6 +142,9 @@ class AccountabilityApiTests(TestCase):
             response.data["data"][0]["id"],
             str(self.consumer_activity.id),
         )
+        self.assertEqual(response.data["data"][0]["user_name"], "Casey Consumer")
+        self.assertEqual(response.data["data"][0]["content_title"], "Reference content")
+        self.assertEqual(response.data["data"][0]["program_name"], "Reference program")
         self.assertNotIn(
             str(self.colleague_activity.id),
             {item["id"] for item in response.data["data"]},
@@ -161,6 +185,8 @@ class AccountabilityApiTests(TestCase):
             response.data["data"][0]["id"],
             str(self.audit_record.id),
         )
+        self.assertEqual(response.data["data"][0]["actor_user_name"], "Avery Admin")
+        self.assertEqual(response.data["data"][0]["resource_name"], "Reference content")
 
         self.client.force_authenticate(self.admin)
         update_response = self.client.patch(
@@ -176,6 +202,9 @@ class AccountabilityApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         event_ids = {item["id"] for item in response.data["data"]}
         self.assertEqual(event_ids, {str(self.tenant_security_event.id)})
+        event = response.data["data"][0]
+        self.assertEqual(event["user_name"], "Casey Consumer")
+        self.assertEqual(event["resource_name"], "Reference content")
         self.assertNotIn(str(self.platform_security_event.id), event_ids)
         self.assertNotIn(str(self.other_security_event.id), event_ids)
 

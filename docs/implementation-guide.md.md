@@ -1264,6 +1264,11 @@ Content
 
 It does NOT mean a user is authorized.
 
+**Approved MVP scope decision (2026-10-15):** Keep assignment as
+Program-to-Content only. Direct user-to-content assignment, including assigning
+a single item independently of its Program, is deferred to future development;
+Program Access Grants remain the only user authorization path in this MVP.
+
 ## Operations
 
 ```text
@@ -1483,10 +1488,10 @@ Make delivered content traceable to the accessing user/context.
 
 ## Watermark information
 
-**Approved privacy decision (2026-10-10):** Each rendered page displays the
-masked user email, organization name, UTC access timestamp, and Content/version
-reference. Mask email by preserving its first local-part character and domain
-(for example, `p***@example.com`). Use the access-record timestamp and reference
+**Updated product decision (2026-10-15):** Each rendered page displays the
+accessing user's name instead of email, organization name, UTC access timestamp,
+and Content/version reference. If the account has no name, display `Unknown user`;
+do not fall back to email. Use the access-record timestamp and reference
 the content UUID prefix plus version number. Render a low-opacity repeated
 diagonal watermark onto each PNG response; do not modify the private original.
 
@@ -1794,7 +1799,11 @@ npm install
 npm run dev
 ```
 
-The Vite development server proxies `/api` to Django. The frontend sends session cookies and CSRF headers and treats backend permissions as authoritative. User, role, and organization-configuration management remains unavailable until the corresponding backend APIs exist; the UI must not simulate those operations.
+The Vite development server proxies `/api` to Django. The frontend sends session cookies and CSRF headers and treats backend permissions as authoritative. Tenant-scoped user list/create/update and read-only role/permission catalogue APIs are available. Role-permission mutation and organization-configuration management are not exposed in the UI; do not simulate those operations. Program access management can list grants within the actor's organization and may not expose grants from another tenant.
+
+The current administration UI groups Organization users and Roles & Permissions in tabs. User creation, content creation, Program creation, and Program Access Grant forms open in dialogs. The Roles & Permissions tab shows each role's assigned permissions; the permission catalogue remains a reference to all available capabilities. The viewer supports immersive full-window page navigation for supported formats. PPTX and MP4 rendering remain deferred and must be reported as unsupported rather than presented as a delivery failure. Activity, Audit, Security Event, Analytics, and Access Report views use resource and user display names where available.
+
+**Approved MVP lifecycle decision (2026-10-15):** Content archival has no unarchive operation in this MVP. Restoring archived Content is deferred until its lifecycle, authorization, and audit behavior are separately specified and approved.
 
 ---
 

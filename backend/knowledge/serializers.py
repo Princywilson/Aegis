@@ -174,7 +174,9 @@ class ContentAccessCreateSerializer(serializers.Serializer):
 class ProgramAccessGrantSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     user_id = serializers.UUIDField(read_only=True)
+    user_name = serializers.SerializerMethodField()
     program_id = serializers.UUIDField(read_only=True)
+    program_name = serializers.CharField(source="program.name", read_only=True)
     granted_by_id = serializers.UUIDField(read_only=True)
     revoked_by_id = serializers.UUIDField(read_only=True, allow_null=True)
 
@@ -183,7 +185,9 @@ class ProgramAccessGrantSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "user_id",
+            "user_name",
             "program_id",
+            "program_name",
             "status",
             "granted_at",
             "granted_by_id",
@@ -201,3 +205,8 @@ class ProgramAccessGrantSerializer(serializers.ModelSerializer):
         ):
             return ProgramAccessGrant.Status.EXPIRED
         return grant.status
+
+    def get_user_name(self, grant):
+        return " ".join(
+            part for part in (grant.user.first_name, grant.user.last_name) if part
+        ) or None

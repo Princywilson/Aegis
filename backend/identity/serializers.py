@@ -195,14 +195,22 @@ class UserUpdateSerializer(serializers.Serializer):
 
 
 class RoleSerializer(serializers.ModelSerializer):
+    permissions = serializers.SerializerMethodField()
+
     class Meta:
         model = Role
-        fields = ["id", "code", "name"]
+        fields = ["id", "code", "name", "permissions"]
         read_only_fields = fields
+
+    def get_permissions(self, role):
+        return [
+            {"code": permission.code, "name": permission.name}
+            for permission in role.permissions.all()
+        ]
 
 
 class PermissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Permission
-        fields = ["code", "name"]
+        fields = ["code", "name", "description"]
         read_only_fields = fields

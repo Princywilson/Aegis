@@ -43,6 +43,7 @@ class ReportingPagination(PageNumberPagination):
 
 class ContentAccessReportSerializer(serializers.ModelSerializer):
     user_id = serializers.UUIDField(read_only=True)
+    user_name = serializers.SerializerMethodField()
     content_id = serializers.UUIDField(read_only=True)
     content_title = serializers.CharField(source="content.title", read_only=True)
     content_version_id = serializers.UUIDField(read_only=True)
@@ -51,20 +52,32 @@ class ContentAccessReportSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     program_id = serializers.UUIDField(read_only=True, allow_null=True)
+    program_name = serializers.CharField(
+        source="program.name",
+        read_only=True,
+        allow_null=True,
+    )
 
     class Meta:
         model = ContentAccess
         fields = [
             "id",
             "user_id",
+            "user_name",
             "content_id",
             "content_title",
             "content_version_id",
             "version_number",
             "program_id",
+            "program_name",
             "accessed_at",
         ]
         read_only_fields = fields
+
+    def get_user_name(self, access):
+        return " ".join(
+            part for part in (access.user.first_name, access.user.last_name) if part
+        ) or None
 
 
 class ReportingView:
@@ -270,7 +283,16 @@ class ContentAnalyticsView(ReportingView, generics.GenericAPIView):
                             "id": str(row["id"]),
                             "event_type": row["event_type"],
                             "occurred_at": row["occurred_at"].isoformat(),
-                            "content_id": str(row["content_id"]),
+                            "content_title": row["content__title"],
+                            "user_name": " ".join(
+                                part
+                                for part in (
+                                    row["user__first_name"],
+                                    row["user__last_name"],
+                                )
+                                if part
+                            ) or None,
+                            "program_name": row["program__name"],
                         }
                         for row in activity.order_by(
                             "-occurred_at",
@@ -279,7 +301,10 @@ class ContentAnalyticsView(ReportingView, generics.GenericAPIView):
                             "id",
                             "event_type",
                             "occurred_at",
-                            "content_id",
+                            "content__title",
+                            "user__first_name",
+                            "user__last_name",
+                            "program__name",
                         )[:10]
                     ],
                 }

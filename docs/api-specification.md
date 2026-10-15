@@ -840,7 +840,7 @@ Required.
 
 ### Authorization
 
-`roles.view`
+`roles.manage`
 
 ### Response
 
@@ -849,11 +849,14 @@ Required.
     "data": [
         {
             "id": "role_admin",
-            "name": "Administrator"
-        },
-        {
-            "id": "role_content_consumer",
-            "name": "Content Consumer"
+            "code": "administrator",
+            "name": "Administrator",
+            "permissions": [
+                {
+                    "code": "CONTENT_VIEW",
+                    "name": "View content"
+                }
+            ]
         }
     ]
 }
@@ -875,7 +878,7 @@ Required.
 
 ### Authorization
 
-Administrative permission.
+`roles.manage`
 
 ### Response
 
@@ -884,21 +887,24 @@ Administrative permission.
     "data": [
         {
             "code": "CONTENT_VIEW",
-            "name": "View content"
+            "name": "View content",
+            "description": ""
         },
         {
             "code": "CONTENT_CREATE",
-            "name": "Create content"
+            "name": "Create content",
+            "description": ""
         },
         {
             "code": "CONTENT_UPDATE",
-            "name": "Update content"
+            "name": "Update content",
+            "description": ""
         }
     ]
 }
 ```
 
-The exact permission matrix is determined by the functional/security design.
+The permission catalogue describes the available capabilities. The `permissions` list on each role reports the capabilities currently assigned to that role. These endpoints are read-only; role-permission changes are not exposed through this API.
 
 ---
 
@@ -1132,6 +1138,8 @@ Required.
 ```
 
 The archive state transition and its `CONTENT_ARCHIVED` AuditRecord must be committed in one database transaction. If the audit record cannot be persisted, the content must remain unchanged. Repeating the operation for already archived content returns `409 INVALID_STATE`. Do not substitute a Security Event for an AuditRecord.
+
+There is no Content unarchive endpoint in the MVP. Restoring archived Content is deferred until the lifecycle transition, authorization requirements, and corresponding audit action are separately approved.
 
 ---
 
@@ -1713,7 +1721,9 @@ Clients with `USER_VIEW` may use the tenant-scoped user list filtered by
     "data": {
         "id": "UUID",
         "user_id": "UUID",
+        "user_name": "Casey Consumer",
         "program_id": "UUID",
+        "program_name": "Reference Program",
         "status": "ACTIVE",
         "granted_at": "timestamp",
         "granted_by_id": "UUID",
@@ -1733,6 +1743,47 @@ Clients with `USER_VIEW` may use the tenant-scoped user list filtered by
 403
 404
 409
+```
+
+---
+
+## List Organization Program Access Grants
+
+```
+GET /api/v1/program-access-grants/?page=1&page_size=50
+```
+
+### Authentication and Authorization
+
+Authentication is required. `ACCESS_GRANT` returns paginated grants scoped to
+the authenticated user's organization. The response includes user and Program
+display names; tenant identifiers are never accepted from the client.
+
+### Response
+
+```json
+{
+    "data": [
+        {
+            "id": "UUID",
+            "user_id": "UUID",
+            "user_name": "Casey Consumer",
+            "program_id": "UUID",
+            "program_name": "Reference Program",
+            "status": "ACTIVE",
+            "granted_at": "<datetime>",
+            "granted_by_id": "UUID",
+            "revoked_at": null,
+            "revoked_by_id": null,
+            "expires_at": null
+        }
+    ],
+    "meta": {
+        "page": 1,
+        "page_size": 50,
+        "total": 1
+    }
+}
 ```
 
 ---
@@ -1793,8 +1844,13 @@ Appropriate access-management permission.
     "data": [
         {
             "id": "access_001",
+            "user_id": "UUID",
+            "user_name": "Casey Consumer",
             "program_id": "program_001",
-            "status": "active"
+            "program_name": "Reference Program",
+            "status": "ACTIVE",
+            "granted_at": "<datetime>",
+            "expires_at": null
         }
     ]
 }
@@ -1921,8 +1977,9 @@ backend to PNG. The longest output edge is capped at 2400 pixels. PPTX and MP4
 are not rendered by this MVP endpoint and return `415
 UNSUPPORTED_DELIVERY_FORMAT`; their processing requirements remain deferred.
 The original source is never returned and no public source URL is created. A
-low-opacity watermark is composed onto each PNG using the approved masked
-email, organization name, UTC access timestamp, and content/version reference.
+low-opacity watermark is composed onto each PNG using the user's display name,
+organization name, UTC access timestamp, and content/version reference. When
+the user has no display name, the watermark shows `Unknown user`, not the email.
 The rendered response can still be captured by an authorized browser user;
 rendering is controlled delivery, not copy prevention.
 
@@ -2017,11 +2074,14 @@ VIEWER_PAGE_RENDERED
         {
             "id": "UUID",
             "user_id": "UUID",
+            "user_name": "Casey Consumer",
             "event_type": "VIEWER_OPENED",
             "occurred_at": "<datetime>",
             "content_id": "UUID",
+            "content_title": "Reference Content",
             "content_version_id": "UUID",
             "program_id": "UUID",
+            "program_name": "Reference Program",
             "content_access_id": "UUID",
             "metadata": null
         }
@@ -2084,9 +2144,11 @@ audit visibility remains unassigned until a record scope is approved.
         {
             "id": "UUID",
             "actor_user_id": "UUID",
+            "actor_user_name": "Avery Admin",
             "action": "CONTENT_VERSION_PUBLISHED",
             "resource_type": "content_version",
             "resource_id": "UUID",
+            "resource_name": "Reference Content · v3",
             "occurred_at": "<datetime>",
             "old_values": null,
             "new_values": {},
@@ -2158,11 +2220,13 @@ organization are never exposed through this organization-level endpoint.
         {
             "id": "UUID",
             "user_id": "UUID",
+            "user_name": "Casey Consumer",
             "event_type": "ACCESS_DENIED",
             "severity": "MEDIUM",
             "occurred_at": "<datetime>",
             "resource_type": "content",
             "resource_id": "UUID",
+            "resource_name": "Reference Content",
             "metadata": {
                 "reason": "authorization_failed"
             }
@@ -2240,7 +2304,9 @@ parameters, invalid UUIDs, and reversed date ranges are rejected.
                 "id": "UUID",
                 "event_type": "VIEWER_PAGE_RENDERED",
                 "occurred_at": "<datetime>",
-                "content_id": "UUID"
+                "content_title": "Reference Content",
+                "user_name": "Casey Consumer",
+                "program_name": "Reference Program"
             }
         ]
     }
@@ -2270,9 +2336,10 @@ authenticated Content Consumer's accesses to currently assigned/authorized
 resources. Optional filters are `content_id`, `program_id`, `user_id`, `from`,
 and `to`, with `page` and `page_size`.
 
-The response is a paginated list containing the access ID, user ID, content
-ID/title, version ID/number, optional Program ID, and access timestamp. It
-does not expose email addresses or private storage details.
+The response is a paginated list containing the access ID, user ID and display
+name, content ID/title, version ID/number, optional Program ID and display
+name, and access timestamp. It does not expose email addresses or private
+storage details.
 
 The User Activity Report uses `/api/v1/activities/`; Version History uses the
 existing `/api/v1/content/{content_id}/versions/` endpoint; and the Audit
@@ -2619,9 +2686,11 @@ Dynamic Watermark
 Protected Delivery
 ```
 
-The watermark may associate the displayed material with the relevant user/session/access context.
-
-The exact watermark fields and rendering mechanism remain implementation-level decisions.
+The watermark associates the displayed material with the relevant
+user/session/access context. For the MVP, it uses the user's display name,
+organization name, UTC access timestamp, and Content/version reference; an
+unnamed user is displayed as `Unknown user`. The rendering mechanism is an
+implementation detail.
 
 Dynamic watermarking is part of the proposed AEGIS protection mechanism, while advanced DRM remains future scope.
 
@@ -2879,6 +2948,7 @@ This preserves the domain distinctions established earlier.
 | 38 | GET | `/security-events` | Security events |
 | 39 | GET | `/analytics/content` | Content analytics |
 | 40 | GET | `/analytics/trainers` | Content Consumer analytics |
+| 41 | GET | `/program-access-grants` | List organization program grants |
 
 ---
 

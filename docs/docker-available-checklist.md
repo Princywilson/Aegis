@@ -185,7 +185,7 @@ The M3 role boundary was approved and recorded in the Implementation Guide on 20
 
 ## M9: Dynamic Watermarking (Browser Presence Verified; Legibility Review Pending)
 
-- [x] Apply the approved masked email, organization name, UTC access timestamp, and content/version reference to each rendered page/image.
+- [x] Apply the approved user display name, organization name, UTC access timestamp, and content/version reference to each rendered page/image; use `Unknown user` rather than email when no name exists.
 - [x] Compose a low-opacity repeated diagonal watermark on the response only; leave private originals unchanged and add no watermark table.
 - [x] Verify rendered output contains the approved watermark content and differs from the unwatermarked output in PostgreSQL tests.
 - [x] Verify the repeated diagonal watermark is present in the rendered browser preview.

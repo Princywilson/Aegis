@@ -291,8 +291,10 @@
     ## BR-025 — Watermark Information Must Reflect the Access Context
     
     Where watermarking is applied, the watermark should contain information that helps associate the displayed content with its authorized access context.
-    
-    The exact watermark fields are an implementation/design decision to be finalized later.
+
+    **Approved MVP fields (2026-10-15):** user display name, organization name,
+    UTC access timestamp, and Content/version reference. If a user has no
+    display name, show `Unknown user`; do not substitute the email address.
     
     ---
     

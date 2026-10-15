@@ -181,11 +181,26 @@ class OrganizationAdministrationApiTests(TestCase):
             {role["code"] for role in roles.data["data"]},
             set(self.roles),
         )
+        administrator = next(
+            role
+            for role in roles.data["data"]
+            if role["code"] == "administrator"
+        )
+        self.assertTrue(administrator["permissions"])
+        self.assertTrue(
+            all(
+                {"code", "name"} <= set(item)
+                for item in administrator["permissions"]
+            )
+        )
         self.assertTrue(
             any(
                 item["code"] == Permission.Code.USER_CREATE
                 for item in permissions.data["data"]
             )
+        )
+        self.assertTrue(
+            all("description" in item for item in permissions.data["data"])
         )
 
         self.client.force_login(self.consumer)

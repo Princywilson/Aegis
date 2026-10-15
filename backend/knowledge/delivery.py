@@ -231,17 +231,16 @@ def _composite_clipped(image, overlay, x, y):
 
 
 def build_watermark_text(access):
-    local_part, separator, domain = access.user.email.partition("@")
-    masked_email = (
-        f"{local_part[:1]}***@{domain}"
-        if separator
-        else "***"
-    )
+    user_name = " ".join(
+        part
+        for part in (access.user.first_name, access.user.last_name)
+        if part
+    ) or "Unknown user"
     accessed_at = access.accessed_at.astimezone(datetime_timezone.utc)
     timestamp = accessed_at.strftime("%Y-%m-%d %H:%M:%S UTC")
     content_reference = str(access.content_id).split("-")[0]
     return (
-        f"{masked_email} | {access.organization.name} | {timestamp} | "
+        f"{user_name} | {access.organization.name} | {timestamp} | "
         f"Content {content_reference} v{access.content_version.version_number}"
     )
 

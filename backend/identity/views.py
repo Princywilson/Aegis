@@ -377,7 +377,7 @@ class RoleListView(generics.ListAPIView):
     def get_queryset(self):
         return Role.objects.filter(
             organization_id=self.request.user.organization_id
-        ).order_by("name", "id")
+        ).prefetch_related("permissions").order_by("name", "id")
 
     def list(self, request, *args, **kwargs):
         serializer = self.get_serializer(self.get_queryset(), many=True)

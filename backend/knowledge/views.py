@@ -711,7 +711,26 @@ class ProgramAccessGrantListCreateView(APIView):
     permission_classes = [HasAegisPermission]
     authentication_classes = [ApiSessionAuthentication]
     required_aegis_permission = Permission.Code.ACCESS_GRANT
-    http_method_names = ["post", "head", "options"]
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get(self, request):
+        allowed = {"page", "page_size"}
+        unknown = set(request.query_params) - allowed
+        if unknown:
+            raise ValidationError(
+                {
+                    key: ["Unexpected query parameter."]
+                    for key in sorted(unknown)
+                }
+            )
+        queryset = ProgramAccessGrant.objects.filter(
+            organization_id=request.user.organization_id
+        ).select_related("program", "user", "granted_by", "revoked_by")
+        paginator = ProgramAccessGrantPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        return paginator.get_paginated_response(
+            ProgramAccessGrantSerializer(page, many=True).data
+        )
 
     def post(self, request):
         serializer = ProgramAccessGrantCreateSerializer(data=request.data)
@@ -729,6 +748,38 @@ class ProgramAccessGrantListCreateView(APIView):
         return Response(
             {"data": ProgramAccessGrantSerializer(grant).data},
             status=status.HTTP_201_CREATED,
+        )
+
+
+class ProgramAccessGrantPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+    def get_page_size(self, request):
+        value = request.query_params.get(self.page_size_query_param)
+        if value is None:
+            return self.page_size
+        try:
+            page_size = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(
+                {"page_size": ["A valid integer is required."]}
+            ) from exc
+        if page_size < 1:
+            raise ValidationError({"page_size": ["Must be greater than zero."]})
+        return min(page_size, self.max_page_size)
+
+    def get_paginated_response(self, data):
+        return Response(
+            {
+                "data": data,
+                "meta": {
+                    "page": self.page.number,
+                    "page_size": self.page.paginator.per_page,
+                    "total": self.page.paginator.count,
+                },
+            }
         )
 
 
