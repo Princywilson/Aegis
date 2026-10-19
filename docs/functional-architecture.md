@@ -189,6 +189,27 @@ User activity and security/audit events must be captured as part of relevant wor
 
 The project direction explicitly includes activity monitoring, access logging and audit logs.
 
+## FA-P05 — Risk Signals and Investigations are Advisory, Not Authorization
+
+The current implementation exposes advisory risk signals based on existing records. `ACCESS_BURST` derives from granted `ContentAccess` rows, while `REPEATED_DENIALS` derives from the normal `ACCESS_DENIED` `SecurityEvent` path. The organization-scoped API supports timezone-aware inclusive time filters, validated filters, and bounded pagination; a React risk-review page surfaces the signals to users with the existing organization security-event permission. Signals do not grant, deny, suspend, or revoke access. The existing thresholds and severities are explainable implementation rules, not statistically validated detections or formally approved policy definitions.
+
+Risk investigations are organization-scoped workflow records exposed through both the API and the React investigation page. The API validates lifecycle transitions, supported evidence references, tenant scope, and source-specific visibility. Every meaningful mutation, including title, summary, severity, note, evidence, and status changes, is atomic with an existing `AuditRecord`; audit metadata does not copy raw administrative text. Evidence is re-resolved under current permissions when read, and source records remain immutable. Once an investigation reaches `RESOLVED` or `DISMISSED`, details and evidence are read-only in both the UI and API; authorized users retain read access. Later findings require a separate investigation.
+
+## FA-P06 — Retrieval is Permission-Scoped and Source-Limited
+
+The current API and React Knowledge search page perform live, case-insensitive substring retrieval over Content titles and descriptions. Every query enforces existing search/view permissions, organization isolation, publication/current-version rules, and (for Content Consumers) active Program assignment and unexpired grant rules. Citations include only authorized Content metadata and only Programs visible to the current caller. The UI and API return fixed retrieval-status text, not a generated answer. They do not process document bodies, perform semantic retrieval, or call AI. Broader generative RAG remains future work requiring separate design and approval.
+
+## FA-P07 — Privileged Preview Is an Explicit, Audited Delivery Context
+
+Administrator and Content Manager use a dedicated `CONTENT_PREVIEW` permission
+to inspect non-archived Content and DRAFT or PUBLISHED versions. Preview reuses
+the protected renderer, rechecks the authenticated user, organization,
+permissions, Content and version state for each page, and applies an explicit
+PREVIEW watermark. It does not reuse or mutate consumer grants or assignments.
+The existing ContentAccess and ActivityEvent records carry the preview context;
+each preview start also creates an AuditRecord. Preview records are excluded
+from consumer access metrics and risk-burst detection.
+
 ---
 
 ## FA-P05 — Modules Communicate Through Business Capabilities

@@ -310,6 +310,7 @@ Permissions may govern:
 - User management
 - Organization management
 - Audit access
+- Privileged content preview
 
 ---
 
@@ -452,6 +453,16 @@ The viewer shall:
 - Display applicable watermark information.
 - Record access/activity events.
 - Prevent basic unauthorized direct access to protected resources.
+
+Administrators and Content Managers with explicit preview, content-view, and
+version-view permissions shall be able to preview non-archived DRAFT or
+PUBLISHED versions in their organization through a separate protected path.
+This preview shall not create or alter consumer grants or assignments. The
+server shall recheck the authenticated user, organization, permission, Content,
+version, and preview-session owner on each rendered-page request, apply a
+visible PREVIEW watermark, and record the preview through existing activity
+and audit mechanisms. Preview activity shall not be included in consumer
+access metrics.
 
 The system shall not claim that browser-based viewing can make screenshots or all forms of copying technically impossible.
 

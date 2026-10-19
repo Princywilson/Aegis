@@ -407,9 +407,40 @@
     - future mobile application
     - API
     - other future clients
+
+    ---
+
+    ## BR-039 — Closed Risk Investigations Are Immutable
+
+    Once a Risk Investigation reaches `RESOLVED` or `DISMISSED`, its business details and evidence references must not be modified.
+
+    - The backend must reject all update requests for a closed investigation, including requests that repeat its existing status.
+    - Authorized users may continue to read the investigation and its currently visible evidence.
+    - The original outcome and existing audit history must be preserved.
+    - Later findings must be recorded in a separate investigation. A direct relationship between follow-up investigations is not currently supported.
+    - No privileged role may bypass this rule unless a separately approved correction policy is introduced.
     
     This prevents security rules from becoming UI-dependent.
     
+    ---
+
+    ## BR-040 — Privileged Content Preview Is Separate from Consumer Access
+
+    Administrator and Content Manager preview requires the explicit
+    `CONTENT_PREVIEW` permission, organization-scoped content/version visibility,
+    and an active user account.
+
+    - Preview is limited to non-archived Content and DRAFT or PUBLISHED versions.
+    - Every rendered page revalidates the authenticated user, organization,
+      preview permission, Content, and selected version.
+    - Preview does not create or alter a Program grant or Content assignment and
+      does not satisfy consumer authorization requirements.
+    - Preview uses the existing protected renderer and is visibly watermarked.
+      Original source files and storage URLs must not be returned.
+    - Preview starts are recorded through the existing audit system and viewer
+      events through the existing activity system.
+    - Preview activity is excluded from consumer access-burst and usage metrics.
+
     ---
     
     # MVP Boundary Rules

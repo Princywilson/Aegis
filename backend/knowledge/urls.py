@@ -4,6 +4,8 @@ from .analytics_views import ContentAccessReportView, ContentAnalyticsView
 from .views import (
     ContentArchiveView,
     ContentAccessCreateView,
+    ContentPreviewCreateView,
+    ContentPreviewDeliveryView,
     ContentDeliveryView,
     ContentDetailView,
     ContentListCreateView,
@@ -11,6 +13,7 @@ from .views import (
     ContentVersionListView,
     ContentVersionArchiveView,
     ContentVersionPublishView,
+    PermissionAwareKnowledgeAssistantView,
     ProgramActivateView,
     ProgramAccessGrantListCreateView,
     ProgramAccessGrantRevokeView,
@@ -54,6 +57,16 @@ urlpatterns = [
         "content/<uuid:content_id>/access/<uuid:access_id>/delivery/",
         ContentDeliveryView.as_view(),
         name="content-delivery",
+    ),
+    path(
+        "content/<uuid:content_id>/preview/",
+        ContentPreviewCreateView.as_view(),
+        name="content-preview-create",
+    ),
+    path(
+        "content/<uuid:content_id>/preview/<uuid:access_id>/delivery/",
+        ContentPreviewDeliveryView.as_view(),
+        name="content-preview-delivery",
     ),
     path(
         "content/<uuid:content_id>/versions/",
@@ -115,5 +128,10 @@ urlpatterns = [
         "users/<uuid:user_id>/access/",
         UserAccessGrantListView.as_view(),
         name="user-access-grants",
+    ),
+    path(
+        "assistant/query/",
+        PermissionAwareKnowledgeAssistantView.as_view(),
+        name="assistant-query",
     ),
 ]

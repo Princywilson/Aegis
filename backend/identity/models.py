@@ -43,6 +43,7 @@ class Permission(models.Model):
         CONTENT_SEARCH = "CONTENT_SEARCH", "Search content"
         CONTENT_CREATE = "CONTENT_CREATE", "Create content"
         CONTENT_UPDATE = "CONTENT_UPDATE", "Update content"
+        CONTENT_PREVIEW = "CONTENT_PREVIEW", "Preview content"
         CONTENT_ARCHIVE = "CONTENT_ARCHIVE", "Archive content"
         CONTENT_PUBLISH = "CONTENT_PUBLISH", "Publish content"
         VERSION_VIEW = "VERSION_VIEW", "View content versions"

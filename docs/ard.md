@@ -430,5 +430,6 @@
     | ADR-008 | Server-side authorization | ✅ Accepted |
     | ADR-009 | Auditability as first-class capability | ✅ Accepted |
     | ADR-010 | Dynamic watermarking | ✅ Accepted |
+    | ADR-011 | Separate permission-aware privileged content preview | ✅ Accepted |
     
     ---

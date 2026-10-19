@@ -116,6 +116,7 @@ class ReportingView:
         queryset = ContentAccess.objects.filter(
             organization_id=user.organization_id,
             access_result=ContentAccess.Result.GRANTED,
+            access_context=ContentAccess.Context.CONSUMER,
         )
         if not user_has_permission(user, self.organization_permission):
             queryset = queryset.filter(
@@ -234,6 +235,7 @@ class ContentAnalyticsView(ReportingView, generics.GenericAPIView):
         activity = ActivityEvent.objects.filter(
             organization_id=request.user.organization_id,
             content_id__in=accesses.values("content_id"),
+            content_access__access_context=ContentAccess.Context.CONSUMER,
         )
         if not user_has_permission(
             request.user,
@@ -296,7 +298,6 @@ class ContentAnalyticsView(ReportingView, generics.GenericAPIView):
                         }
                         for row in activity.order_by(
                             "-occurred_at",
-                            "id",
                         ).values(
                             "id",
                             "event_type",

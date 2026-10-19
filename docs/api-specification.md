@@ -35,6 +35,9 @@ The API provides controlled access to:
 - Activity tracking
 - Audit records
 - Security events
+- Risk signals
+- Risk investigations
+- Retrieval and citations for authorized knowledge search
 - Analytics
 
 The API is the primary application boundary between the frontend and backend.
@@ -207,6 +210,27 @@ Required Permission
       +
 Resource Access
 ```
+
+---
+
+## 4.1 Risk Signals, Investigations, and Retrieval endpoints
+
+The current backend exposes these additions:
+
+- `GET /api/v1/risk-signals/` returns tenant-scoped, advisory risk signals. It requires `SECURITY_EVENT_VIEW_ORGANIZATION` and returns `data` plus pagination `meta`. Supported query parameters are `from`, `to`, `user_id`, `severity` (`LOW` or `MEDIUM`), `signal_type` (`ACCESS_BURST` or `REPEATED_DENIALS`), `page` (positive integer, default `1`), and `page_size` (positive integer, default `20`, maximum `100`). `from` and `to` must be timezone-aware ISO-8601 datetimes and are inclusive. A reversed range, malformed filter, or unknown parameter returns a validation error. If either bound is omitted, the other default is a 24-hour window ending at the supplied `to` or current time.
+- `GET /api/v1/risk-signals/summary/` returns roll-up counts by signal type and severity using the same date and signal filters; pagination parameters are not supported.
+- `ACCESS_BURST` retains the existing rule behavior: at least four granted `ContentAccess` records across at least three distinct Content IDs for a user in a rolling 24-hour window; severity is `LOW`.
+- `REPEATED_DENIALS` uses the existing normal-denial `SecurityEvent` source: at least three `ACCESS_DENIED` events with `resource_type="content"` and a non-null user, within a rolling 24-hour window; severity is `MEDIUM`.
+- Signals are derived at request time; no signal table or new logging mechanism is introduced. The thresholds, window, and severity values describe existing implementation behavior and have not been validated as product policy or through labeled-data evaluation. Signals do not alter authorization.
+- `GET /api/v1/risk-investigations/` lists investigations for the authenticated organization. It accepts `status`, `severity`, `page`, and `page_size`; filters are validated and page size is limited to 100.
+- `GET /api/v1/risk-investigations/{investigation_id}/` returns an organization-scoped detail record.
+- `POST /api/v1/risk-investigations/` creates an investigation with optional bounded evidence references. Supported references are `{ "type": "security_event" | "audit_record", "id": "<UUID>" }`; they are resolved within the organization and require the corresponding source-view permission.
+- `PATCH /api/v1/risk-investigations/{investigation_id}/` updates status, title, summary, notes, severity, and evidence with server-side validation while the investigation is `OPEN` or `IN_REVIEW`. Status transitions follow `OPEN` → `IN_REVIEW` or `DISMISSED`, then `IN_REVIEW` → `RESOLVED` or `DISMISSED`. Once status is `RESOLVED` or `DISMISSED`, all PATCH requests are rejected as read-only, including repeated status values. Authorized GET requests remain available. Each permitted meaningful mutation and its `AuditRecord` are atomic. Audit metadata records changed field names and evidence counts, not raw notes, summaries, or titles.
+- `POST /api/v1/assistant/query/` accepts exactly a JSON object with a string `question` of 1–200 non-whitespace characters. It searches only authorized Content titles and descriptions using case-insensitive substring matching and returns at most five metadata citations. It rejects invalid body shapes, unknown fields, blank/non-string/oversized questions, and requires both `CONTENT_SEARCH` and `CONTENT_VIEW`.
+- Retrieval results are scoped to the authenticated organization, published Content, and a published current version belonging to that same Content and organization. Content Consumers additionally require an active Program, matching Content assignment, and active unexpired grant for that user. Other roles follow their existing organization-level Content permissions. `program_names` are included only when the caller has `PROGRAM_VIEW` and are restricted to Programs visible to that caller and assigned to the cited Content.
+- The response's `answer` field is fixed retrieval-status text; it is not generated output. An empty authorized match returns no citations and `insufficient_authorized_sources: true`. The API does not reveal metadata for unauthorized matches.
+
+The React app includes an advisory Risk signals page, an investigation list/detail/create/edit workflow for users with the organization security-event-view permission, and a **Knowledge search** metadata-retrieval page for users with both content-search and content-view permissions. Investigation evidence is re-resolved and filtered by the caller's current organization and source-specific permissions when read. Risk signals never authorize access. Knowledge search is permission-aware metadata retrieval, not semantic document retrieval or a completed generative RAG assistant.
 
 ---
 
@@ -1980,12 +2004,63 @@ The original source is never returned and no public source URL is created. A
 low-opacity watermark is composed onto each PNG using the user's display name,
 organization name, UTC access timestamp, and content/version reference. When
 the user has no display name, the watermark shows `Unknown user`, not the email.
-The rendered response can still be captured by an authorized browser user;
-rendering is controlled delivery, not copy prevention.
+### Privileged content preview
 
-Dynamic watermarking and activity events remain later milestone work.
+Preview is a separate operator workflow and does not grant consumer access.
+Only users with `CONTENT_PREVIEW`, `CONTENT_VIEW`, and `VERSION_VIEW` in their
+own organization may start and deliver a preview. Administrator and Content
+Manager receive the explicit preview permission through the existing RBAC
+baseline.
 
-### Status
+```
+POST /api/v1/content/{content_id}/preview/
+Content-Type: application/json
+
+{"version_id": "UUID"}
+```
+
+The Content and selected ContentVersion must belong to the authenticated
+organization, the user must be active, and both records must be non-archived:
+Content and versions in `DRAFT` or `PUBLISHED` state are eligible. The response
+contains a user-bound preview access ID, Content ID, Version ID, context, and
+start timestamp; the ID is not a bearer token.
+
+```json
+{
+  "data": {
+    "access_id": "UUID",
+    "content_id": "UUID",
+    "version_id": "UUID",
+    "access_context": "PREVIEW",
+    "accessed_at": "timestamp"
+  }
+}
+```
+
+```
+GET /api/v1/content/{content_id}/preview/{access_id}/delivery?page=1
+```
+
+Every page request rechecks the authenticated session, access-record owner,
+organization, active account, permissions, Content lifecycle, selected version,
+and version-to-Content relationship. It uses the existing renderer and returns
+only a watermarked PNG (`private, no-store`); it never returns a source file or
+storage URL. Grant and assignment checks are intentionally not performed for
+this separate operator preview path and are not modified by it.
+
+The successful start response is `201 Created`. Each preview start creates a
+`CONTENT_PREVIEW_STARTED` AuditRecord. Viewer-open
+and rendered-page ActivityEvents carry the `PREVIEW` access context. Preview
+ContentAccess records are excluded from consumer access reports, analytics, and
+access-burst signals.
+
+Missing `CONTENT_PREVIEW` permission returns `403`; missing content/version
+visibility or inaccessible/out-of-scope Content, version, or preview session
+returns `404`; invalid request fields return `400`.
+Unsupported viewer formats return `415`, and rendering failures retain the
+existing safe error behavior.
+
+### Delivery and preview status
 
 ```
 200

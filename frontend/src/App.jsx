@@ -5,6 +5,7 @@ import {
   NavLink,
   Route,
   Routes,
+  useParams,
   useNavigate,
 } from "react-router-dom";
 
@@ -47,6 +48,21 @@ const navigation = [
     label: "Security events",
     path: "/security-events",
     permission: ["SECURITY_EVENT_VIEW_ORGANIZATION"],
+  },
+  {
+    label: "Risk signals",
+    path: "/risk-signals",
+    permission: ["SECURITY_EVENT_VIEW_ORGANIZATION"],
+  },
+  {
+    label: "Investigations",
+    path: "/risk-investigations",
+    permission: ["SECURITY_EVENT_VIEW_ORGANIZATION"],
+  },
+  {
+    label: "Knowledge search",
+    path: "/assistant",
+    allPermissions: ["CONTENT_SEARCH", "CONTENT_VIEW"],
   },
   {
     label: "Analytics",
@@ -117,7 +133,11 @@ export function LoginPage({ onLogin }) {
       await apiRequest("/auth/login/", { method: "POST", body: form });
       await onLogin();
     } catch (requestError) {
-      setError(requestError.message);
+      setError(
+        requestError.status === 429
+          ? "Too many sign-in attempts. Please wait before trying again."
+          : requestError.message,
+      );
     } finally {
       setBusy(false);
     }
@@ -240,7 +260,10 @@ function App() {
         <div className="tenant-label">WORKSPACE</div>
         <div className="tenant-name">{auth.user.organization.name}</div>
         <nav className="nav-list" aria-label="Main navigation">
-          {navigation.filter((item) => canUse(auth.user, item.permission)).map((item) => (
+          {navigation.filter((item) => (
+            canUse(auth.user, item.permission)
+            && (!item.allPermissions || item.allPermissions.every((code) => auth.user.permissions.includes(code)))
+          )).map((item) => (
             <NavLink
               end={item.path === "/"}
               key={item.path}
@@ -257,8 +280,11 @@ function App() {
             <strong>{auth.user.name || auth.user.email}</strong>
             <small>{auth.user.roles.join(" · ") || "Member"}</small>
           </div>
-          <button className="icon-button" onClick={logout} aria-label="Sign out" title="Sign out">
-            ↗
+          <button className="sidebar-signout" onClick={logout} aria-label="Sign out" title="Sign out">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M10 4H5v16h5M14 8l4 4-4 4M8 12h10" />
+            </svg>
+            <span>Sign out</span>
           </button>
         </div>
       </aside>
@@ -271,9 +297,17 @@ function App() {
           <Route path="/programs" element={<ProgramsPage user={auth.user} />} />
           <Route path="/access" element={<AccessPage user={auth.user} />} />
           <Route path="/viewer" element={<ViewerPage />} />
+          <Route
+            path="/preview/:contentId/:versionId"
+            element={<ViewerPage preview />}
+          />
           <Route path="/activity" element={<AccountabilityPage endpoint="activities/" title="Activity" />} />
           <Route path="/audit" element={<AccountabilityPage endpoint="audits/" title="Audit records" />} />
           <Route path="/security-events" element={<AccountabilityPage endpoint="security-events/" title="Security events" />} />
+          <Route path="/risk-signals" element={<RiskSignalsPage />} />
+          <Route path="/risk-investigations" element={<RiskInvestigationsPage />} />
+          <Route path="/risk-investigation" element={<RiskInvestigationsPage />} />
+          <Route path="/assistant" element={<KnowledgeSearchPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -527,30 +561,30 @@ function Administration({ user }) {
           id="organization-users-panel"
           role="tabpanel"
         >
-          <div className="section-heading">
+          <div className="section-heading admin-users-heading">
             <div>
               <h2>Organization users</h2>
               <p className="muted">User data and filters are scoped to this organization.</p>
             </div>
-          </div>
-          <div className="admin-toolbar">
-            <label>
-              Search
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setUserPage(1);
-                }}
-                placeholder="Name or email"
-              />
-            </label>
-            {canCreateUsers && (
-              <button className="primary" onClick={() => setCreateOpen(true)}>
-                + Create User
-              </button>
-            )}
+            <div className="admin-toolbar">
+              <label>
+                Search
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setUserPage(1);
+                  }}
+                  placeholder="Name or email"
+                />
+              </label>
+              {canCreateUsers && (
+                <button className="primary" onClick={() => setCreateOpen(true)}>
+                  + Create User
+                </button>
+              )}
+            </div>
           </div>
           {users.loading ? (
             <p className="muted">Loading users…</p>
@@ -726,6 +760,7 @@ function Administration({ user }) {
 }
 
 function ContentPage({ user }) {
+  const navigate = useNavigate();
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedId, setSelectedId] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -750,6 +785,8 @@ function ContentPage({ user }) {
   const canCreate = user.permissions.includes("CONTENT_CREATE");
   const canCreateVersion = user.permissions.includes("VERSION_CREATE");
   const canPublish = user.permissions.includes("VERSION_PUBLISH");
+  const canPreview = user.permissions.includes("CONTENT_PREVIEW")
+    && user.permissions.includes("VERSION_VIEW");
 
   async function createContent(event) {
     event.preventDefault();
@@ -863,7 +900,35 @@ function ContentPage({ user }) {
               <tbody>{versionItems.map((version) => (
                 <tr key={version.id}>
                   <td>v{version.version_number}</td><td><StatusBadge value={version.status} /></td><td>{version.version_notes || "—"}</td><td>{formatDate(version.created_at)}</td>
-                  <td>{version.status === "DRAFT" && canPublish && <button className="text-button" onClick={() => changeVersion(version.id, "publish")}>Publish</button>}{version.status !== "PUBLISHED" && version.status !== "ARCHIVED" && user.permissions.includes("VERSION_ARCHIVE") && <button className="text-button danger-text" onClick={() => changeVersion(version.id, "archive")}>Archive version</button>}</td>
+                  <td>
+                    {canPreview && selected.status !== "ARCHIVED"
+                      && ["DRAFT", "PUBLISHED"].includes(version.status) && (
+                        <button
+                          className="text-button"
+                          onClick={() => navigate(`/preview/${selectedId}/${version.id}`)}
+                        >
+                          Preview
+                        </button>
+                      )}
+                    {version.status === "DRAFT" && canPublish && (
+                      <button
+                        className="text-button"
+                        onClick={() => changeVersion(version.id, "publish")}
+                      >
+                        Publish
+                      </button>
+                    )}
+                    {version.status !== "PUBLISHED"
+                      && version.status !== "ARCHIVED"
+                      && user.permissions.includes("VERSION_ARCHIVE") && (
+                        <button
+                          className="text-button danger-text"
+                          onClick={() => changeVersion(version.id, "archive")}
+                        >
+                          Archive version
+                        </button>
+                      )}
+                  </td>
                 </tr>
               ))}{!versionItems.length && <tr><td colSpan="5" className="empty-cell">No versions uploaded.</td></tr>}</tbody>
             </table>
@@ -1146,8 +1211,9 @@ function AccessPage({ user }) {
   );
 }
 
-function ViewerPage() {
-  const [contentId, setContentId] = useState("");
+function ViewerPage({ preview = false }) {
+  const { contentId: previewContentId = "", versionId: previewVersionId = "" } = useParams();
+  const [contentId, setContentId] = useState(previewContentId);
   const [programId, setProgramId] = useState("");
   const [access, setAccess] = useState(null);
   const [fullWindow, setFullWindow] = useState(false);
@@ -1156,14 +1222,41 @@ function ViewerPage() {
   const [imageUrl, setImageUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const content = useResource("/content/?page_size=100");
-  const programs = useResource("/programs/?page_size=100");
-  const contentItems = content.data?.results || content.data || [];
+  const content = useResource(
+    preview ? `/content/${previewContentId}/` : "/content/?page_size=100",
+  );
+  const programs = useResource(preview ? null : "/programs/?page_size=100");
+  const contentItems = preview
+    ? (content.data ? [content.data] : [])
+    : (content.data?.results || content.data || []);
   const programItems = programs.data?.results || programs.data || [];
 
   useEffect(() => () => {
     if (imageUrl) URL.revokeObjectURL(imageUrl);
   }, [imageUrl]);
+
+  useEffect(() => {
+    if (!preview || !previewContentId || !previewVersionId) return undefined;
+    let active = true;
+    setBusy(true);
+    setError("");
+    apiRequest(`/content/${previewContentId}/preview/`, {
+      method: "POST",
+      body: { version_id: previewVersionId },
+    }).then((result) => {
+      if (active) {
+        setAccess(result);
+        setPage(1);
+      }
+    }).catch((requestError) => {
+      if (active) setError(requestError.message);
+    }).finally(() => {
+      if (active) setBusy(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [preview, previewContentId, previewVersionId]);
 
   async function startAccess(event) {
     event.preventDefault();
@@ -1193,7 +1286,9 @@ function ViewerPage() {
       setError("");
       try {
         const response = await apiRequest(
-          `/content/${access.content_id}/access/${access.access_id}/delivery/?page=${page}`,
+          preview
+            ? `/content/${access.content_id}/preview/${access.access_id}/delivery/?page=${page}`
+            : `/content/${access.content_id}/access/${access.access_id}/delivery/?page=${page}`,
           { expect: "response" },
         );
         const blob = await response.blob();
@@ -1221,19 +1316,30 @@ function ViewerPage() {
       active = false;
       if (nextUrl) URL.revokeObjectURL(nextUrl);
     };
-  }, [access, page]);
+  }, [access, page, preview]);
 
   return (
     <>
-      <PageHeader eyebrow="Secure delivery" title="Content viewer" description="Rendered content is delivered only after the server validates current access." />
+      <PageHeader
+        eyebrow={preview ? "Privileged preview" : "Secure delivery"}
+        title={preview ? "Content preview" : "Content viewer"}
+        description={preview
+          ? "This preview is permission-checked on every page and does not grant consumer access."
+          : "Rendered content is delivered only after the server validates current access."}
+      />
       <ErrorMessage error={error || content.error || programs.error} />
-      <section className="panel">
+      {preview && (
+        <p className="notice">
+          PREVIEW — this protected preview does not create a consumer grant or assignment.
+        </p>
+      )}
+      {!preview && <section className="panel">
         <form className="form-grid" onSubmit={startAccess}>
           <label>Published content<select required value={contentId} onChange={(event) => setContentId(event.target.value)}><option value="" disabled>Select content</option>{contentItems.filter((item) => item.status === "PUBLISHED").map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
           <label>Active program<select required value={programId} onChange={(event) => setProgramId(event.target.value)}><option value="" disabled>Select program</option>{programItems.filter((item) => item.status === "ACTIVE").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <div><button className="primary" disabled={busy || !contentId || !programId}>{busy && !access ? "Checking access…" : "Open content"}</button></div>
         </form>
-      </section>
+      </section>}
       {access && (
         <section className={`panel viewer-panel${fullWindow ? " viewer-fullscreen" : ""}`}>
           <div className="section-heading">
@@ -1326,6 +1432,512 @@ function ReportsPage() {
         {!resource.loading && !records.length && <tr><td colSpan="5" className="empty-cell">No access records found.</td></tr>}
       </tbody></table></div>
       {resource.data?.meta && <div className="pagination"><span>{resource.data.meta.total} records</span><div><button className="secondary" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</button><span>Page {page}</span><button className="secondary" disabled={page * resource.data.meta.page_size >= resource.data.meta.total} onClick={() => setPage((value) => value + 1)}>Next</button></div></div>}
+      </section>
+    </>
+  );
+}
+
+function RiskSignalsPage() {
+  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState({ from: "", to: "" });
+  const [appliedFilters, setAppliedFilters] = useState({ from: "", to: "" });
+  const [validationError, setValidationError] = useState("");
+  const query = new URLSearchParams({ page: String(page), page_size: "20" });
+  if (appliedFilters.from) {
+    query.set("from", new Date(appliedFilters.from).toISOString());
+  }
+  if (appliedFilters.to) {
+    query.set("to", new Date(appliedFilters.to).toISOString());
+  }
+  const resource = useResource(`/risk-signals/?${query.toString()}`);
+  const signals = resource.data?.results || [];
+
+  function submitFilters(event) {
+    event.preventDefault();
+    setValidationError("");
+    const from = filters.from ? new Date(filters.from) : null;
+    const to = filters.to ? new Date(filters.to) : null;
+    if (
+      (from && Number.isNaN(from.getTime()))
+      || (to && Number.isNaN(to.getTime()))
+      || (from && to && from > to)
+    ) {
+      setValidationError("Enter a valid time range with the start no later than the end.");
+      return;
+    }
+    setPage(1);
+    setAppliedFilters(filters);
+  }
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Security review"
+        title="Advisory risk signals"
+        description="Explainable activity indicators for review. These signals do not change access decisions."
+      />
+      <ErrorMessage error={validationError || resource.error} />
+      <section className="panel">
+        <form className="content-toolbar filter-toolbar" onSubmit={submitFilters}>
+          <label>
+            From
+            <input
+              type="datetime-local"
+              value={filters.from}
+              onChange={(event) => setFilters({ ...filters, from: event.target.value })}
+            />
+          </label>
+          <label>
+            To
+            <input
+              type="datetime-local"
+              value={filters.to}
+              onChange={(event) => setFilters({ ...filters, to: event.target.value })}
+            />
+          </label>
+          <button className="primary" type="submit">Apply time filter</button>
+        </form>
+      </section>
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <h2>Signals</h2>
+            <p className="muted">Thresholds reflect current rule behavior and are not validated risk scores.</p>
+          </div>
+          <span className="muted">{resource.data?.meta?.total ?? 0} signals</span>
+        </div>
+        {resource.loading ? (
+          <p className="muted">Loading advisory signals…</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Signal</th>
+                  <th>Severity</th>
+                  <th>User reference</th>
+                  <th>Events</th>
+                  <th>Content items</th>
+                  <th>Observed window</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {signals.map((signal) => (
+                  <tr key={`${signal.type}-${signal.user_id}`}>
+                    <td>{signal.type.replaceAll("_", " ")}</td>
+                    <td><StatusBadge value={signal.severity} /></td>
+                    <td>{signal.user_id}</td>
+                    <td>{signal.event_count}</td>
+                    <td>{signal.content_count ?? "—"}</td>
+                    <td>{formatDate(signal.first_seen)} – {formatDate(signal.last_seen)}</td>
+                    <td>{signal.reason}</td>
+                  </tr>
+                ))}
+                {!signals.length && (
+                  <tr><td colSpan="7" className="empty-cell">No advisory signals in this time range.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {resource.data?.meta && (
+          <div className="pagination">
+            <span>Page {page} of {Math.max(1, Math.ceil(resource.data.meta.total / resource.data.meta.page_size))}</span>
+            <div>
+              <button className="secondary" disabled={page <= 1 || resource.loading} onClick={() => setPage((value) => value - 1)}>Previous</button>
+              <button className="secondary" disabled={page * resource.data.meta.page_size >= resource.data.meta.total || resource.loading} onClick={() => setPage((value) => value + 1)}>Next</button>
+            </div>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+function RiskInvestigationsPage() {
+  const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [filters, setFilters] = useState({ status: "", severity: "" });
+  const [appliedFilters, setAppliedFilters] = useState(filters);
+  const [selectedId, setSelectedId] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [createMessage, setCreateMessage] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editMessage, setEditMessage] = useState("");
+  const [evidenceChanged, setEvidenceChanged] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    title: "",
+    summary: "",
+    notes: "",
+    severity: "MEDIUM",
+    evidenceIds: [],
+  });
+  const [editForm, setEditForm] = useState({
+    title: "",
+    summary: "",
+    notes: "",
+    severity: "MEDIUM",
+    evidenceIds: [],
+  });
+  const listQuery = new URLSearchParams({ page: String(page), page_size: "20" });
+  if (appliedFilters.status) listQuery.set("status", appliedFilters.status);
+  if (appliedFilters.severity) listQuery.set("severity", appliedFilters.severity);
+  const listResource = useResource(
+    `/risk-investigations/?${listQuery.toString()}`,
+    refreshKey,
+  );
+  const investigation = useResource(
+    selectedId ? `/risk-investigations/${selectedId}/` : null,
+    refreshKey,
+  );
+  const evidenceResource = useResource(
+    "/security-events/?event_type=ACCESS_DENIED&page=1&page_size=100",
+  );
+  const investigations = listResource.data?.results || [];
+  const availableEvents = evidenceResource.data?.results || [];
+  const selected = investigation.data;
+  const isClosed = selected?.status === "RESOLVED" || selected?.status === "DISMISSED";
+  const evidenceOptions = new Map(
+    [...availableEvents, ...(selected?.evidence || [])].map((item) => [item.id, item]),
+  );
+
+  useEffect(() => {
+    if (!selected) return;
+    setEditForm({
+      title: selected.title || "",
+      summary: selected.summary || "",
+      notes: selected.notes || "",
+      severity: selected.severity || "MEDIUM",
+      evidenceIds: (selected.evidence || []).map((item) => item.id),
+    });
+    setEvidenceChanged(false);
+    setEditError("");
+    setEditMessage("");
+  }, [selected]);
+
+  function applyFilters(event) {
+    event.preventDefault();
+    setPage(1);
+    setAppliedFilters(filters);
+  }
+
+  async function createInvestigation(event) {
+    event.preventDefault();
+    setCreateBusy(true);
+    setCreateError("");
+    setCreateMessage("");
+    try {
+      const result = await apiRequest("/risk-investigations/", {
+        method: "POST",
+        body: {
+          title: createForm.title,
+          summary: createForm.summary,
+          notes: createForm.notes,
+          severity: createForm.severity,
+          evidence: createForm.evidenceIds.map((id) => ({ type: "security_event", id })),
+        },
+      });
+      setSelectedId(result.id);
+      setCreateForm({
+        title: "",
+        summary: "",
+        notes: "",
+        severity: "MEDIUM",
+        evidenceIds: [],
+      });
+      setCreateMessage("Investigation created.");
+      setShowCreate(false);
+      setRefreshKey((value) => value + 1);
+    } catch (error) {
+      setCreateError(error.message || "Unable to create the investigation.");
+    } finally {
+      setCreateBusy(false);
+    }
+  }
+
+  async function saveInvestigation(event) {
+    event.preventDefault();
+    if (!selectedId || isClosed) return;
+    setEditBusy(true);
+    setEditError("");
+    setEditMessage("");
+    try {
+      const body = {
+        title: editForm.title,
+        summary: editForm.summary,
+        notes: editForm.notes,
+        severity: editForm.severity,
+      };
+      if (evidenceChanged) {
+        body.evidence = editForm.evidenceIds.map((id) => {
+          const source = evidenceOptions.get(id);
+          return {
+            type: source?.type || "security_event",
+            id,
+          };
+        });
+      }
+      await apiRequest(`/risk-investigations/${selectedId}/`, {
+        method: "PATCH",
+        body,
+      });
+      setEditMessage("Investigation changes saved.");
+      setRefreshKey((value) => value + 1);
+    } catch (error) {
+      setEditError(error.message || "Unable to save the investigation.");
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function transitionInvestigation(status) {
+    if (!selectedId) return;
+    setEditBusy(true);
+    setEditError("");
+    setEditMessage("");
+    try {
+      await apiRequest(`/risk-investigations/${selectedId}/`, {
+        method: "PATCH",
+        body: { status },
+      });
+      setEditMessage(`Investigation moved to ${status.replaceAll("_", " ")}.`);
+      setRefreshKey((value) => value + 1);
+    } catch (error) {
+      setEditError(error.message || "Unable to update the investigation status.");
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  const transitions = {
+    OPEN: ["IN_REVIEW", "DISMISSED"],
+    IN_REVIEW: ["RESOLVED", "DISMISSED"],
+    RESOLVED: [],
+    DISMISSED: [],
+  };
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Security review"
+        title="Risk investigations"
+        description="Review organization-scoped findings, attach authorized evidence, and record audited updates."
+      >
+        <button className="primary" onClick={() => setShowCreate((value) => !value)}>
+          {showCreate ? "Close form" : "+ New investigation"}
+        </button>
+      </PageHeader>
+      {createMessage && <p className="notice success" role="status">{createMessage}</p>}
+      {showCreate && (
+        <Modal title="Create investigation" onClose={() => setShowCreate(false)}>
+          <ErrorMessage error={createError} />
+          <form className="stack" onSubmit={createInvestigation}>
+            <label>Title<input required maxLength={255} value={createForm.title} onChange={(event) => setCreateForm({ ...createForm, title: event.target.value })} /></label>
+            <label>Summary<textarea value={createForm.summary} onChange={(event) => setCreateForm({ ...createForm, summary: event.target.value })} /></label>
+            <label>Notes<textarea value={createForm.notes} onChange={(event) => setCreateForm({ ...createForm, notes: event.target.value })} /></label>
+            <label>Severity<select value={createForm.severity} onChange={(event) => setCreateForm({ ...createForm, severity: event.target.value })}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option></select></label>
+            <label>Authorized denial-event evidence
+              <select multiple value={createForm.evidenceIds} onChange={(event) => setCreateForm({ ...createForm, evidenceIds: Array.from(event.target.selectedOptions, (option) => option.value) })}>
+                {availableEvents.map((item) => <option key={item.id} value={item.id}>{item.event_type} · {formatDate(item.occurred_at)} · {item.id}</option>)}
+              </select>
+            </label>
+            {evidenceResource.error && <ErrorMessage error={evidenceResource.error} />}
+            {!evidenceResource.loading && !availableEvents.length && <p className="muted">No authorized denied-content events are available to attach.</p>}
+            <div className="modal-actions">
+              <button className="secondary" type="button" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button className="primary" disabled={createBusy || evidenceResource.loading}>{createBusy ? "Creating…" : "Create investigation"}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      <section className="panel">
+        <form className="content-toolbar filter-toolbar" onSubmit={applyFilters}>
+          <label>Status<select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">All statuses</option><option value="OPEN">Open</option><option value="IN_REVIEW">In review</option><option value="RESOLVED">Resolved</option><option value="DISMISSED">Dismissed</option></select></label>
+          <label>Severity<select value={filters.severity} onChange={(event) => setFilters({ ...filters, severity: event.target.value })}><option value="">All severities</option><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option></select></label>
+          <button className="primary" type="submit">Apply filters</button>
+        </form>
+        <ErrorMessage error={listResource.error} />
+        {listResource.loading ? <p className="muted">Loading investigations…</p> : (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Title</th><th>Status</th><th>Severity</th><th>Created</th></tr></thead>
+              <tbody>
+                {investigations.map((item) => (
+                  <tr key={item.id} aria-selected={selectedId === item.id}>
+                    <td><button className="text-button" onClick={() => setSelectedId(item.id)}>{item.title}</button></td>
+                    <td><StatusBadge value={item.status} /></td>
+                    <td><StatusBadge value={item.severity} /></td>
+                    <td>{formatDate(item.created_at)}</td>
+                  </tr>
+                ))}
+                {!investigations.length && <tr><td colSpan="4" className="empty-cell">No investigations found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {listResource.data?.meta && (
+          <div className="pagination">
+            <span>{listResource.data.meta.total} investigations · page {page}</span>
+            <div>
+              <button className="secondary" disabled={page <= 1 || listResource.loading} onClick={() => setPage((value) => value - 1)}>Previous</button>
+              <button className="secondary" disabled={page * listResource.data.meta.page_size >= listResource.data.meta.total || listResource.loading} onClick={() => setPage((value) => value + 1)}>Next</button>
+            </div>
+          </div>
+        )}
+      </section>
+      {selectedId && (
+        <section className="panel">
+          {investigation.error && <ErrorMessage error={investigation.error} />}
+          {investigation.loading ? <p className="muted">Loading investigation…</p> : selected && (
+            <>
+              <div className="section-heading">
+                <h2>Investigation details</h2>
+                <StatusBadge value={selected.status} />
+              </div>
+              <ErrorMessage error={editError} />
+              {editMessage && <p className="notice success" role="status">{editMessage}</p>}
+              {isClosed && (
+                <p className="muted" role="note">
+                  This investigation is closed and read-only. Record later findings in a separate investigation.
+                </p>
+              )}
+              <form className="stack" onSubmit={saveInvestigation}>
+                <label>Title<input required maxLength={255} disabled={isClosed || editBusy} value={editForm.title} onChange={(event) => setEditForm({ ...editForm, title: event.target.value })} /></label>
+                <label>Summary<textarea disabled={isClosed || editBusy} value={editForm.summary} onChange={(event) => setEditForm({ ...editForm, summary: event.target.value })} /></label>
+                <label>Notes<textarea disabled={isClosed || editBusy} value={editForm.notes} onChange={(event) => setEditForm({ ...editForm, notes: event.target.value })} /></label>
+                <label>Severity<select disabled={isClosed || editBusy} value={editForm.severity} onChange={(event) => setEditForm({ ...editForm, severity: event.target.value })}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option></select></label>
+                <label>Authorized evidence
+                  <select multiple disabled={isClosed || editBusy} value={editForm.evidenceIds} onChange={(event) => {
+                    setEvidenceChanged(true);
+                    setEditForm({ ...editForm, evidenceIds: Array.from(event.target.selectedOptions, (option) => option.value) });
+                  }}>
+                    {Array.from(evidenceOptions.values()).map((item) => <option key={item.id} value={item.id}>{item.event_type || item.action} · {formatDate(item.occurred_at)} · {item.id}</option>)}
+                  </select>
+                </label>
+                <div className="content-toolbar">
+                  {!isClosed && (
+                    <button className="primary" disabled={editBusy}>{editBusy ? "Saving…" : "Save changes"}</button>
+                  )}
+                  {transitions[selected.status]?.map((status) => (
+                    <button key={status} className="secondary" type="button" disabled={editBusy} onClick={() => transitionInvestigation(status)}>{status.replaceAll("_", " ")}</button>
+                  ))}
+                </div>
+              </form>
+            </>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
+
+function KnowledgeSearchPage() {
+  const [question, setQuestion] = useState("");
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function searchKnowledge(event) {
+    event.preventDefault();
+    const normalizedQuestion = question.trim();
+    if (!normalizedQuestion) {
+      setError("Enter a search question.");
+      setResult(null);
+      return;
+    }
+    if (normalizedQuestion.length > 200) {
+      setError("Search questions must be no more than 200 characters.");
+      setResult(null);
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    setResult(null);
+    try {
+      const response = await apiRequest("/assistant/query/", {
+        method: "POST",
+        body: { question: normalizedQuestion },
+      });
+      setResult(response);
+    } catch (requestError) {
+      setError(requestError.message || "Unable to search authorized content.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Permission-aware retrieval"
+        title="Knowledge search"
+        description="Find currently authorized content by searching its title and description."
+      />
+      <p className="notice notice-info" role="note">
+        <span className="notice-icon" aria-hidden="true">!</span>
+        <span>
+          This version searches content metadata only. It does not search document
+          contents, generate answers, or call an AI service.
+        </span>
+      </p>
+      <section className="panel">
+        <form className="content-toolbar filter-toolbar knowledge-search-toolbar" onSubmit={searchKnowledge}>
+          <label htmlFor="knowledge-search-question">
+            <span>Search authorized content</span>
+            <input
+              id="knowledge-search-question"
+              maxLength={200}
+              value={question}
+              onChange={(event) => {
+                setQuestion(event.target.value);
+                setError("");
+                setResult(null);
+              }}
+              placeholder="Enter title or description terms"
+            />
+          </label>
+          <button className="primary" disabled={busy}>
+            {busy ? "Searching…" : "Search authorized content"}
+          </button>
+        </form>
+        <p className="muted">Up to 200 characters. Results are reauthorized for each search.</p>
+        <ErrorMessage error={error} />
+        {busy && <p className="muted" role="status">Searching authorized content…</p>}
+        {result && (
+          <div className="retrieval-results" aria-live="polite">
+            <div className="section-heading">
+              <h2>Matching content</h2>
+              <span className="muted">
+                {result.citations?.length || 0} result{result.citations?.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <p>{result.answer}</p>
+            {!result.citations?.length ? (
+              <p className="empty-cell">No authorized content metadata matched this search.</p>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Content</th><th>Version</th><th>Authorized programs</th><th>Description</th></tr></thead>
+                  <tbody>
+                    {result.citations.map((citation) => (
+                      <tr key={citation.content_id}>
+                        <td><strong>{citation.title}</strong><br /><span className="muted">{citation.content_id}</span></td>
+                        <td>{citation.version_number == null ? "—" : `Version ${citation.version_number}`}</td>
+                        <td>{citation.program_names?.join(", ") || "—"}</td>
+                        <td>{citation.source_summary}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </section>
     </>
   );

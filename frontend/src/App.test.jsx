@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
@@ -54,6 +54,27 @@ describe("login page", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Authentication failed.");
+  });
+
+  it("gives non-specific wait-and-retry guidance when sign-in is rate limited", async () => {
+    const user = userEvent.setup();
+    apiRequest.mockRejectedValueOnce(
+      Object.assign(new Error("Authentication failed."), { status: 429 }),
+    );
+    render(
+      <MemoryRouter>
+        <LoginPage onLogin={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByLabelText("Organization slug"), "north");
+    await user.type(screen.getByLabelText("Email"), "person@example.test");
+    await user.type(screen.getByLabelText("Password"), "wrong");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Too many sign-in attempts. Please wait before trying again.",
+    );
   });
 });
 
@@ -208,6 +229,431 @@ describe("administration and access workflows", () => {
   });
 });
 
+describe("advisory risk review", () => {
+  it("shows paginated advisory signals to a user with security-event permission", async () => {
+    const user = userEvent.setup();
+    const currentUser = {
+      id: "admin-1",
+      name: "Avery Admin",
+      email: "avery@example.test",
+      organization: { id: "org-1", name: "North" },
+      roles: ["Administrator"],
+      permissions: ["SECURITY_EVENT_VIEW_ORGANIZATION"],
+    };
+    apiRequest.mockImplementation((path) => {
+      if (path === "/auth/me/") return Promise.resolve(currentUser);
+      if (path === "/risk-signals/?page=1&page_size=20") {
+        return Promise.resolve({
+          results: [{
+            type: "REPEATED_DENIALS",
+            severity: "MEDIUM",
+            user_id: "user-reference",
+            event_count: 3,
+            first_seen: "2026-10-19T10:00:00Z",
+            last_seen: "2026-10-19T10:10:00Z",
+            reason: "Multiple denied content-access attempts were recorded within 24 hours.",
+          }],
+          meta: { page: 1, page_size: 20, total: 21 },
+        });
+      }
+      if (path === "/risk-signals/?page=2&page_size=20") {
+        return Promise.resolve({
+          results: [],
+          meta: { page: 2, page_size: 20, total: 21 },
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/risk-signals"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Advisory risk signals" })).toBeInTheDocument();
+    expect(await screen.findByText("REPEATED DENIALS")).toBeInTheDocument();
+    expect(screen.getByText(/do not change access decisions/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText("No advisory signals in this time range.");
+    expect(apiRequest).toHaveBeenCalledWith("/risk-signals/?page=2&page_size=20");
+  });
+});
+
+describe("risk investigation workflow", () => {
+  const currentUser = {
+    id: "admin-1",
+    name: "Avery Admin",
+    email: "avery@example.test",
+    organization: { id: "org-1", name: "North" },
+    roles: ["Administrator"],
+    permissions: ["SECURITY_EVENT_VIEW_ORGANIZATION"],
+  };
+  const investigationId = "investigation-1";
+  const eventId = "event-1";
+  const investigation = {
+    id: investigationId,
+    title: "Review denied access",
+    summary: "Several attempts were denied.",
+    notes: "",
+    status: "OPEN",
+    severity: "MEDIUM",
+    evidence: [],
+    created_at: "2026-10-19T10:00:00Z",
+  };
+
+  it("applies status and severity filters and paginates the investigation list", async () => {
+    const user = userEvent.setup();
+    const requestedPaths = [];
+    apiRequest.mockImplementation((path) => {
+      requestedPaths.push(path);
+      if (path === "/auth/me/") return Promise.resolve(currentUser);
+      if (path.startsWith("/risk-investigations/?")) {
+        return Promise.resolve({
+          results: [],
+          meta: { page: Number(new URLSearchParams(path.split("?")[1]).get("page")), page_size: 20, total: 21 },
+        });
+      }
+      if (path === "/security-events/?event_type=ACCESS_DENIED&page=1&page_size=100") {
+        return Promise.resolve({
+          results: [{
+            id: eventId,
+            event_type: "ACCESS_DENIED",
+            occurred_at: "2026-10-19T10:00:00Z",
+          }],
+          meta: { page: 1, page_size: 100, total: 1 },
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/risk-investigations"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("No investigations found.");
+    await user.selectOptions(screen.getByLabelText("Status"), "OPEN");
+    await user.selectOptions(screen.getByLabelText("Severity"), "HIGH");
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    await waitFor(() => {
+      expect(requestedPaths).toContain(
+        "/risk-investigations/?page=1&page_size=20&status=OPEN&severity=HIGH",
+      );
+    });
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => {
+      expect(requestedPaths).toContain(
+        "/risk-investigations/?page=2&page_size=20&status=OPEN&severity=HIGH",
+      );
+    });
+  });
+
+  it("loads details, saves audited fields through the API, and transitions status", async () => {
+    const user = userEvent.setup();
+    apiRequest.mockImplementation((path, options = {}) => {
+      if (path === "/auth/me/") return Promise.resolve(currentUser);
+      if (path.startsWith("/risk-investigations/?")) {
+        return Promise.resolve({
+          results: [investigation],
+          meta: { page: 1, page_size: 20, total: 1 },
+        });
+      }
+      if (path === "/security-events/?event_type=ACCESS_DENIED&page=1&page_size=100") {
+        return Promise.resolve({
+          results: [{
+            id: eventId,
+            event_type: "ACCESS_DENIED",
+            occurred_at: "2026-10-19T10:00:00Z",
+          }],
+          meta: { page: 1, page_size: 100, total: 1 },
+        });
+      }
+      if (path === `/risk-investigations/${investigationId}/` && options.method === "PATCH") {
+        return Promise.resolve({ ...investigation, ...options.body });
+      }
+      if (path === `/risk-investigations/${investigationId}/`) {
+        return Promise.resolve(investigation);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/risk-investigations"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Review denied access" }));
+    const notes = await screen.findByLabelText("Notes");
+    await user.type(notes, "Reviewed evidence.");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(apiRequest).toHaveBeenCalledWith(
+      `/risk-investigations/${investigationId}/`,
+      expect.objectContaining({
+        method: "PATCH",
+        body: expect.objectContaining({
+          notes: "Reviewed evidence.",
+        }),
+      }),
+    );
+    const notesUpdate = apiRequest.mock.calls.find(
+      ([path, options]) =>
+        path === `/risk-investigations/${investigationId}/`
+        && options?.method === "PATCH"
+        && options?.body?.notes === "Reviewed evidence.",
+    );
+    expect(notesUpdate[1].body).not.toHaveProperty("evidence");
+    await screen.findByText("Investigation changes saved.");
+    await user.selectOptions(
+      screen.getByLabelText("Authorized evidence"),
+      eventId,
+    );
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(apiRequest).toHaveBeenCalledWith(
+      `/risk-investigations/${investigationId}/`,
+      expect.objectContaining({
+        method: "PATCH",
+        body: expect.objectContaining({
+          evidence: [{ type: "security_event", id: eventId }],
+        }),
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "IN REVIEW" }));
+    expect(apiRequest).toHaveBeenCalledWith(
+      `/risk-investigations/${investigationId}/`,
+      { method: "PATCH", body: { status: "IN_REVIEW" } },
+    );
+  });
+
+  it("shows resolved investigations as read-only", async () => {
+    const user = userEvent.setup();
+    const closedCase = {
+      ...investigation,
+      id: "closed-investigation",
+      title: "Resolved case",
+      status: "RESOLVED",
+    };
+    apiRequest.mockImplementation((path, options = {}) => {
+      if (path === "/auth/me/") return Promise.resolve(currentUser);
+      if (path.startsWith("/risk-investigations/?")) {
+        return Promise.resolve({
+          results: [closedCase],
+          meta: { page: 1, page_size: 20, total: 1 },
+        });
+      }
+      if (path === "/security-events/?event_type=ACCESS_DENIED&page=1&page_size=100") {
+        return Promise.resolve([]);
+      }
+      if (path === `/risk-investigations/${closedCase.id}/` && !options.method) {
+        return Promise.resolve(closedCase);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/risk-investigations"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Resolved case" }));
+    expect(await screen.findByRole("note")).toHaveTextContent("closed and read-only");
+    const detailPanel = screen.getByRole("heading", { name: "Investigation details" }).closest("section");
+    expect(within(detailPanel).getByLabelText("Title")).toBeDisabled();
+    expect(within(detailPanel).getByLabelText("Summary")).toBeDisabled();
+    expect(within(detailPanel).getByLabelText("Notes")).toBeDisabled();
+    expect(within(detailPanel).getByLabelText("Severity")).toBeDisabled();
+    expect(within(detailPanel).getByLabelText("Authorized evidence")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
+    expect(apiRequest).not.toHaveBeenCalledWith(
+      `/risk-investigations/${closedCase.id}/`,
+      expect.objectContaining({ method: "PATCH" }),
+    );
+  });
+
+  it("creates an investigation with a selected authorized security-event reference", async () => {
+    const user = userEvent.setup();
+    apiRequest.mockImplementation((path, options = {}) => {
+      if (path === "/auth/me/") return Promise.resolve(currentUser);
+      if (path.startsWith("/risk-investigations/?")) {
+        return Promise.resolve({ results: [], meta: { page: 1, page_size: 20, total: 0 } });
+      }
+      if (path === "/security-events/?event_type=ACCESS_DENIED&page=1&page_size=100") {
+        return Promise.resolve({
+          results: [{
+            id: eventId,
+            event_type: "ACCESS_DENIED",
+            occurred_at: "2026-10-19T10:00:00Z",
+          }],
+          meta: { page: 1, page_size: 100, total: 1 },
+        });
+      }
+      if (path === "/risk-investigations/" && options.method === "POST") {
+        return Promise.resolve({ ...investigation, id: investigationId, ...options.body });
+      }
+      if (path === `/risk-investigations/${investigationId}/`) {
+        return Promise.resolve({ ...investigation, id: investigationId });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/risk-investigations"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "+ New investigation" }));
+    expect(screen.getByRole("dialog", { name: "Create investigation" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Title"), "Denied access review");
+    await user.selectOptions(
+      screen.getByLabelText("Authorized denial-event evidence"),
+      eventId,
+    );
+    await user.click(screen.getByRole("button", { name: "Create investigation" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Investigation created.");
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/risk-investigations/",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.objectContaining({
+          title: "Denied access review",
+          evidence: [{ type: "security_event", id: eventId }],
+        }),
+      }),
+    );
+  });
+
+  it("shows API validation failures without reporting a successful creation", async () => {
+    const user = userEvent.setup();
+    apiRequest.mockImplementation((path, options = {}) => {
+      if (path === "/auth/me/") return Promise.resolve(currentUser);
+      if (path.startsWith("/risk-investigations/?")) {
+        return Promise.resolve({ results: [], meta: { page: 1, page_size: 20, total: 0 } });
+      }
+      if (path === "/security-events/?event_type=ACCESS_DENIED&page=1&page_size=100") {
+        return Promise.resolve({ results: [], meta: { page: 1, page_size: 100, total: 0 } });
+      }
+      if (path === "/risk-investigations/" && options.method === "POST") {
+        return Promise.reject(new Error("Investigation title is invalid."));
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/risk-investigations"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "+ New investigation" }));
+    await user.type(screen.getByLabelText("Title"), "Invalid case");
+    await user.click(screen.getByRole("button", { name: "Create investigation" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Investigation title is invalid.",
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+});
+
+describe("permission-aware metadata search", () => {
+  const consumer = {
+    id: "consumer-1",
+    name: "Casey Consumer",
+    email: "casey@example.test",
+    organization: { id: "org-1", name: "North" },
+    roles: ["Content Consumer"],
+    permissions: ["CONTENT_SEARCH", "CONTENT_VIEW"],
+  };
+
+  it("submits metadata terms and displays authorized citations without presenting a generated answer", async () => {
+    const user = userEvent.setup();
+    apiRequest.mockImplementation((path, options = {}) => {
+      if (path === "/auth/me/") return Promise.resolve(consumer);
+      if (path === "/assistant/query/" && options.method === "POST") {
+        return Promise.resolve({
+          answer: "I found 1 authorized content item(s) with matching metadata. The citations below are permission-checked references; no answer was generated.",
+          citations: [{
+            content_id: "content-1",
+            title: "Quarterly policy guidance",
+            version_number: 2,
+            program_names: ["Safety Program"],
+            source_summary: "Policy guidance for the program.",
+          }],
+          insufficient_authorized_sources: false,
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/assistant"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.type(
+      await screen.findByLabelText("Search authorized content"),
+      "Quarterly policy guidance",
+    );
+    await user.click(await screen.findByRole("button", { name: "Search authorized content" }));
+    expect(apiRequest).toHaveBeenCalledWith("/assistant/query/", {
+      method: "POST",
+      body: { question: "Quarterly policy guidance" },
+    });
+    expect(await screen.findByRole("heading", { name: "Matching content" })).toBeInTheDocument();
+    expect(screen.getByText("Quarterly policy guidance")).toBeInTheDocument();
+    expect(screen.getByText("Safety Program")).toBeInTheDocument();
+    expect(screen.getByText(/no answer was generated/)).toBeInTheDocument();
+    const limitationNotice = screen.getByRole("note");
+    const pageHeader = screen.getByRole("heading", { name: "Knowledge search" }).closest("header");
+    expect(pageHeader.nextElementSibling).toBe(limitationNotice);
+    expect(limitationNotice).toHaveClass("notice-info");
+    expect(limitationNotice).toHaveTextContent(/does not search document contents/);
+    const searchForm = screen.getByLabelText("Search authorized content").closest("form");
+    expect(searchForm).toHaveClass("knowledge-search-toolbar");
+    expect(screen.getByLabelText("Search authorized content").closest("label"))
+      .toContainElement(screen.getByLabelText("Search authorized content"));
+    expect(searchForm).toContainElement(
+      within(searchForm).getByRole("button", { name: "Search authorized content" }),
+    );
+    const navigation = screen.getByRole("navigation", { name: "Main navigation" });
+    expect(navigation.nextElementSibling).toHaveClass("sidebar-footer");
+  });
+
+  it("validates blank input and surfaces API errors", async () => {
+    const user = userEvent.setup();
+    apiRequest.mockImplementation((path) => {
+      if (path === "/auth/me/") return Promise.resolve(consumer);
+      if (path === "/assistant/query/") {
+        return Promise.reject(new Error("Search permission is required."));
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/assistant"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Search authorized content" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter a search question.");
+    expect(apiRequest).not.toHaveBeenCalledWith(
+      "/assistant/query/",
+      expect.anything(),
+    );
+
+    await user.type(await screen.findByLabelText("Search authorized content"), "not permitted");
+    await user.click(screen.getByRole("button", { name: "Search authorized content" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Search permission is required.",
+    );
+  });
+});
+
 describe("authenticated content workflow", () => {
   it("creates content and opens its details", async () => {
     const user = userEvent.setup();
@@ -271,6 +717,129 @@ describe("authenticated content workflow", () => {
         description: "A governed business reference.",
       },
     });
+  });
+
+  it("opens the protected preview route only for permitted content managers", async () => {
+    const user = userEvent.setup();
+    apiRequest.mockImplementation((path, options = {}) => {
+      if (path === "/auth/me/") {
+        return Promise.resolve({
+          id: "manager-1",
+          name: "Casey Manager",
+          email: "casey@example.test",
+          organization: { id: "org-1", name: "North" },
+          roles: ["Content Manager"],
+          permissions: [
+            "CONTENT_VIEW",
+            "CONTENT_SEARCH",
+            "VERSION_VIEW",
+            "CONTENT_PREVIEW",
+          ],
+        });
+      }
+      if (path === "/content/?page_size=100") {
+        return Promise.resolve([{
+          id: "content-1",
+          title: "Operating guide",
+          status: "PUBLISHED",
+        }]);
+      }
+      if (path === "/content/content-1/versions/") {
+        return Promise.resolve([{
+          id: "version-1",
+          version_number: 1,
+          status: "PUBLISHED",
+          created_at: "2026-10-19T10:00:00Z",
+        }]);
+      }
+      if (path === "/content/content-1/preview/" && options.method === "POST") {
+        return Promise.resolve({
+          access_id: "preview-1",
+          content_id: "content-1",
+          version_id: "version-1",
+        });
+      }
+      if (path === "/content/content-1/") {
+        return Promise.resolve({
+          id: "content-1",
+          title: "Operating guide",
+          status: "PUBLISHED",
+        });
+      }
+      if (
+        path === "/content/content-1/preview/preview-1/delivery/?page=1"
+        && options.expect === "response"
+      ) {
+        return Promise.reject(
+          Object.assign(new Error("Unsupported format."), { status: 415 }),
+        );
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/content"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Operating guide" }));
+    await user.click(await screen.findByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText(/PREVIEW — this protected preview/)).toBeInTheDocument();
+    expect(apiRequest).toHaveBeenCalledWith("/content/content-1/preview/", {
+      method: "POST",
+      body: { version_id: "version-1" },
+    });
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/content/content-1/preview/preview-1/delivery/?page=1",
+      { expect: "response" },
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This file format is not yet supported in the protected viewer.",
+    );
+  });
+
+  it("does not offer preview to users without the explicit preview permission", async () => {
+    const user = userEvent.setup();
+    apiRequest.mockImplementation((path) => {
+      if (path === "/auth/me/") {
+        return Promise.resolve({
+          id: "manager-1",
+          name: "Casey Manager",
+          email: "casey@example.test",
+          organization: { id: "org-1", name: "North" },
+          roles: ["Content Manager"],
+          permissions: ["CONTENT_VIEW", "VERSION_VIEW"],
+        });
+      }
+      if (path === "/content/?page_size=100") {
+        return Promise.resolve([{
+          id: "content-1",
+          title: "Operating guide",
+          status: "PUBLISHED",
+        }]);
+      }
+      if (path === "/content/content-1/versions/") {
+        return Promise.resolve([{
+          id: "version-1",
+          version_number: 1,
+          status: "PUBLISHED",
+          created_at: "2026-10-19T10:00:00Z",
+        }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/content"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Operating guide" }));
+    expect(await screen.findByText("Version history")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
   });
 
   it("assigns multiple roles from the create-user dropdown", async () => {

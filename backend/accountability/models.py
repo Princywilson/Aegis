@@ -171,6 +171,10 @@ class AuditRecord(models.Model):
         CONTENT_CREATED = "CONTENT_CREATED", "Content created"
         CONTENT_UPDATED = "CONTENT_UPDATED", "Content updated"
         CONTENT_ARCHIVED = "CONTENT_ARCHIVED", "Content archived"
+        CONTENT_PREVIEW_STARTED = (
+            "CONTENT_PREVIEW_STARTED",
+            "Content preview started",
+        )
         CONTENT_VERSION_CREATED = (
             "CONTENT_VERSION_CREATED",
             "Content version created",
@@ -201,6 +205,22 @@ class AuditRecord(models.Model):
         PERMISSION_CHANGED = "PERMISSION_CHANGED", "Permission changed"
         USER_CREATED = "USER_CREATED", "User created"
         USER_UPDATED = "USER_UPDATED", "User updated"
+        RISK_INVESTIGATION_CREATED = (
+            "RISK_INVESTIGATION_CREATED",
+            "Risk investigation created",
+        )
+        RISK_INVESTIGATION_UPDATED = (
+            "RISK_INVESTIGATION_UPDATED",
+            "Risk investigation updated",
+        )
+        RISK_INVESTIGATION_RESOLVED = (
+            "RISK_INVESTIGATION_RESOLVED",
+            "Risk investigation resolved",
+        )
+        RISK_INVESTIGATION_DISMISSED = (
+            "RISK_INVESTIGATION_DISMISSED",
+            "Risk investigation dismissed",
+        )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
@@ -242,6 +262,7 @@ class AuditRecord(models.Model):
                         "CONTENT_CREATED",
                         "CONTENT_UPDATED",
                         "CONTENT_ARCHIVED",
+                        "CONTENT_PREVIEW_STARTED",
                         "CONTENT_VERSION_CREATED",
                         "CONTENT_VERSION_PUBLISHED",
                         "CONTENT_VERSION_ARCHIVED",
@@ -257,6 +278,10 @@ class AuditRecord(models.Model):
                         "PERMISSION_CHANGED",
                         "USER_CREATED",
                         "USER_UPDATED",
+                        "RISK_INVESTIGATION_CREATED",
+                        "RISK_INVESTIGATION_UPDATED",
+                        "RISK_INVESTIGATION_RESOLVED",
+                        "RISK_INVESTIGATION_DISMISSED",
                     ]
                 ),
                 name="audit_action_valid",
@@ -275,6 +300,82 @@ class AuditRecord(models.Model):
 
     def __str__(self):
         return self.action
+
+
+class RiskInvestigation(models.Model):
+    class Status(models.TextChoices):
+        OPEN = "OPEN", "Open"
+        IN_REVIEW = "IN_REVIEW", "In review"
+        RESOLVED = "RESOLVED", "Resolved"
+        DISMISSED = "DISMISSED", "Dismissed"
+
+    class Severity(models.TextChoices):
+        LOW = "LOW", "Low"
+        MEDIUM = "MEDIUM", "Medium"
+        HIGH = "HIGH", "High"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        "identity.Organization",
+        on_delete=models.PROTECT,
+        related_name="risk_investigations",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="risk_investigations_created",
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="risk_investigations_reviewed",
+        null=True,
+        blank=True,
+    )
+    title = models.CharField(max_length=255)
+    summary = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.OPEN,
+    )
+    severity = models.CharField(
+        max_length=10,
+        choices=Severity.choices,
+        default=Severity.MEDIUM,
+    )
+    evidence = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "risk_investigations"
+        ordering = ["-created_at", "id"]
+        indexes = [
+            models.Index(
+                fields=["organization", "status", "created_at"],
+                name="risk_inv_org_status_idx",
+            ),
+            models.Index(
+                fields=["organization", "severity", "created_at"],
+                name="risk_inv_org_severity_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(status__in=["OPEN", "IN_REVIEW", "RESOLVED", "DISMISSED"]),
+                name="risk_investigation_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=Q(severity__in=["LOW", "MEDIUM", "HIGH"]),
+                name="risk_investigation_severity_valid",
+            ),
+        ]
+
+    def __str__(self):
+        return self.title
 
 
 class AuthenticationRateLimitCounter(models.Model):

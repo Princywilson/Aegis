@@ -188,6 +188,7 @@ class ContentAnalyticsApiTests(TestCase):
         program,
         *,
         result=ContentAccess.Result.GRANTED,
+        access_context=ContentAccess.Context.CONSUMER,
     ):
         return ContentAccess.objects.create(
             organization=content.organization,
@@ -196,6 +197,7 @@ class ContentAnalyticsApiTests(TestCase):
             content_version=content.current_version,
             program=program,
             access_result=result,
+            access_context=access_context,
         )
 
     def _get(self, user, path):
@@ -332,3 +334,43 @@ class ContentAnalyticsApiTests(TestCase):
         self.assertEqual(recent["user_name"], "Casey Consumer")
         self.assertEqual(recent["content_title"], "Assigned content")
         self.assertEqual(recent["program_name"], "Assigned")
+
+    def test_preview_sessions_and_activity_are_excluded_from_consumer_usage(self):
+        preview = self._access(
+            self.consumer,
+            self.content,
+            None,
+            access_context=ContentAccess.Context.PREVIEW,
+        )
+        preview_event = ActivityEvent.objects.create(
+            organization=self.organization,
+            user=self.consumer,
+            event_type=ActivityEvent.EventType.VIEWER_OPENED,
+            content=self.content,
+            content_version=self.content.current_version,
+            content_access=preview,
+            metadata={"access_context": ContentAccess.Context.PREVIEW},
+        )
+
+        consumer_analytics = self._get(
+            self.consumer,
+            "/api/v1/analytics/content/",
+        )
+        consumer_report = self._get(self.consumer, "/api/v1/reports/access/")
+        organization_analytics = self._get(
+            self.admin,
+            "/api/v1/analytics/content/",
+        )
+        organization_report = self._get(
+            self.admin,
+            "/api/v1/reports/access/",
+        )
+
+        self.assertEqual(consumer_analytics.data["data"]["total_views"], 2)
+        self.assertEqual(consumer_report.data["meta"]["total"], 2)
+        self.assertEqual(organization_analytics.data["data"]["total_views"], 4)
+        self.assertEqual(organization_report.data["meta"]["total"], 4)
+        self.assertNotIn(
+            str(preview_event.id),
+            str(consumer_analytics.data["data"]["recent_activity"]),
+        )

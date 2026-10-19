@@ -418,6 +418,10 @@ class ProgramAccessGrant(models.Model):
 
 
 class ContentAccess(models.Model):
+    class Context(models.TextChoices):
+        CONSUMER = "CONSUMER", "Consumer delivery"
+        PREVIEW = "PREVIEW", "Privileged preview"
+
     class Result(models.TextChoices):
         GRANTED = "GRANTED", "Granted"
         DENIED = "DENIED", "Denied"
@@ -456,6 +460,11 @@ class ContentAccess(models.Model):
         choices=Result.choices,
         default=Result.GRANTED,
     )
+    access_context = models.CharField(
+        max_length=20,
+        choices=Context.choices,
+        default=Context.CONSUMER,
+    )
 
     class Meta:
         db_table = "content_access"
@@ -470,6 +479,17 @@ class ContentAccess(models.Model):
             models.CheckConstraint(
                 condition=models.Q(access_result__in=["GRANTED", "DENIED"]),
                 name="content_access_result_valid",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(access_context__in=["CONSUMER", "PREVIEW"]),
+                name="content_access_context_valid",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(access_context="PREVIEW")
+                    | models.Q(program__isnull=True)
+                ),
+                name="content_preview_without_program",
             ),
         ]
 

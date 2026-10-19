@@ -171,6 +171,22 @@ class ContentAccessCreateSerializer(serializers.Serializer):
         return super().to_internal_value(data)
 
 
+class ContentPreviewCreateSerializer(serializers.Serializer):
+    version_id = serializers.UUIDField()
+
+    def to_internal_value(self, data):
+        if hasattr(data, "keys"):
+            unexpected_fields = set(data.keys()) - set(self.fields)
+            if unexpected_fields:
+                raise serializers.ValidationError(
+                    {
+                        field: ["Unexpected field."]
+                        for field in sorted(unexpected_fields)
+                    }
+                )
+        return super().to_internal_value(data)
+
+
 class ProgramAccessGrantSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     user_id = serializers.UUIDField(read_only=True)

@@ -176,6 +176,9 @@ class RbacTests(TestCase):
             has_permission(management, Permission.Code.CONTENT_UPDATE)
         )
         self.assertFalse(
+            has_permission(management, Permission.Code.CONTENT_PREVIEW)
+        )
+        self.assertFalse(
             has_permission(management, Permission.Code.AUDIT_VIEW_ORGANIZATION)
         )
         self.assertFalse(
@@ -233,6 +236,7 @@ class RbacTests(TestCase):
         )
         self.assertTrue(has_permission(manager, Permission.Code.CONTENT_CREATE))
         self.assertTrue(has_permission(manager, Permission.Code.ASSIGNMENT_MANAGE))
+        self.assertTrue(has_permission(manager, Permission.Code.CONTENT_PREVIEW))
         self.assertFalse(has_permission(manager, Permission.Code.ACCESS_GRANT))
         self.assertFalse(has_permission(manager, Permission.Code.ACCESS_REVOKE))
 

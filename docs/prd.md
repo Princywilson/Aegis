@@ -149,6 +149,8 @@ Permissions include:
 - View reports
 - Configure system
 - Access audit logs
+- Preview eligible organizational content through a separate, audited protected
+  viewer without granting consumer access
 
 ---
 
@@ -162,6 +164,7 @@ Can:
 - Create versions
 - Categorize content
 - Archive obsolete materials
+- Preview non-archived draft or published versions through the protected viewer
 
 ---
 

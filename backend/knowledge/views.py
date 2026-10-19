@@ -14,6 +14,11 @@ from identity.models import Permission, User
 from identity.permissions import HasAegisPermission
 
 from .authentication import ApiSessionAuthentication
+from .access import (
+    content_queryset_for,
+    program_queryset_for,
+    user_is_content_consumer_only,
+)
 from .models import (
     Content,
     ContentAccess,
@@ -29,6 +34,7 @@ from .serializers import (
     ContentVersionCreateSerializer,
     ContentVersionSerializer,
     ContentAccessCreateSerializer,
+    ContentPreviewCreateSerializer,
     ProgramAccessGrantCreateSerializer,
     ProgramAccessGrantSerializer,
     ProgramSerializer,
@@ -36,11 +42,14 @@ from .serializers import (
 from .delivery import (
     apply_dynamic_watermark,
     get_content_access_for_delivery,
+    get_content_preview_for_delivery,
     render_content_version,
     start_content_access,
+    start_content_preview,
 )
 from accountability.models import ActivityEvent, AuditRecord
 from accountability.services import record_access_denied
+from .retrieval import retrieve_authorized_sources
 from .services import (
     archive_content,
     archive_content_version,
@@ -52,44 +61,6 @@ from .services import (
     remove_content_assignment,
     set_program_status,
 )
-
-
-def user_is_content_consumer_only(user):
-    role_codes = set(user.user_roles.values_list("role__code", flat=True))
-    return (
-        "content_consumer" in role_codes
-        and not role_codes.intersection(
-            {"administrator", "content_manager", "management"}
-        )
-    )
-
-
-def program_queryset_for(user):
-    queryset = Program.objects.filter(organization_id=user.organization_id)
-    if user_is_content_consumer_only(user):
-        now = timezone.now()
-        queryset = queryset.filter(
-            access_grants__organization_id=user.organization_id,
-            access_grants__user=user,
-            access_grants__status=ProgramAccessGrant.Status.ACTIVE,
-            status=Program.Status.ACTIVE,
-        ).filter(
-            Q(access_grants__expires_at__isnull=True)
-            | Q(access_grants__expires_at__gt=now)
-        ).distinct()
-    return queryset
-
-
-def content_queryset_for(user):
-    queryset = Content.objects.filter(organization_id=user.organization_id)
-    if user_is_content_consumer_only(user):
-        queryset = queryset.filter(
-            status=Content.Status.PUBLISHED,
-            current_version__status=ContentVersion.Status.PUBLISHED,
-            program_assignments__organization_id=user.organization_id,
-            program_assignments__program__in=program_queryset_for(user),
-        ).distinct()
-    return queryset
 
 
 class ContentPagination(PageNumberPagination):
@@ -401,11 +372,56 @@ class ContentAccessCreateView(APIView):
         )
 
 
+class ContentPreviewCreateView(APIView):
+    permission_classes = [HasAegisPermission]
+    authentication_classes = [ApiSessionAuthentication]
+    required_aegis_permission = Permission.Code.CONTENT_PREVIEW
+    http_method_names = ["post", "head", "options"]
+
+    def post(self, request, content_id):
+        serializer = ContentPreviewCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            access = start_content_preview(
+                content_id=content_id,
+                version_id=serializer.validated_data["version_id"],
+                organization_id=request.user.organization_id,
+                user=request.user,
+            )
+        except ContentAccess.DoesNotExist as exc:
+            record_access_denied(
+                organization=request.user.organization,
+                user=request.user,
+                content_id=content_id,
+            )
+            raise NotFound() from exc
+        return Response(
+            {
+                "data": {
+                    "access_id": str(access.id),
+                    "content_id": str(access.content_id),
+                    "version_id": str(access.content_version_id),
+                    "access_context": access.access_context,
+                    "accessed_at": access.accessed_at,
+                }
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class ContentDeliveryView(APIView):
     permission_classes = [HasAegisPermission]
     authentication_classes = [ApiSessionAuthentication]
     required_aegis_permission = Permission.Code.SECURE_DELIVERY
     http_method_names = ["get", "head", "options"]
+
+    def get_access(self, request, content_id, access_id):
+        return get_content_access_for_delivery(
+            access_id=access_id,
+            content_id=content_id,
+            organization_id=request.user.organization_id,
+            user=request.user,
+        )
 
     def get(self, request, content_id, access_id):
         try:
@@ -420,12 +436,7 @@ class ContentDeliveryView(APIView):
             )
 
         try:
-            access = get_content_access_for_delivery(
-                access_id=access_id,
-                content_id=content_id,
-                organization_id=request.user.organization_id,
-                user=request.user,
-            )
+            access = self.get_access(request, content_id, access_id)
         except ContentAccess.DoesNotExist as exc:
             record_access_denied(
                 organization=request.user.organization,
@@ -451,7 +462,10 @@ class ContentDeliveryView(APIView):
             content_version=access.content_version,
             program=access.program,
             content_access=access,
-            metadata={"page_number": page_number},
+            metadata={
+                "page_number": page_number,
+                "access_context": access.access_context,
+            },
         )
         response = HttpResponse(rendered.content, content_type="image/png")
         response["Cache-Control"] = "private, no-store"
@@ -461,6 +475,18 @@ class ContentDeliveryView(APIView):
         response["X-Content-Type-Options"] = "nosniff"
         response["X-Page-Count"] = str(rendered.page_count)
         return response
+
+
+class ContentPreviewDeliveryView(ContentDeliveryView):
+    required_aegis_permission = Permission.Code.CONTENT_PREVIEW
+
+    def get_access(self, request, content_id, access_id):
+        return get_content_preview_for_delivery(
+            access_id=access_id,
+            content_id=content_id,
+            organization_id=request.user.organization_id,
+            user=request.user,
+        )
 
 
 class ContentVersionPublishView(APIView):
@@ -822,3 +848,29 @@ class UserAccessGrantListView(generics.ListAPIView):
         response = super().list(request, *args, **kwargs)
         response.data = {"data": response.data}
         return response
+
+
+class PermissionAwareKnowledgeAssistantView(APIView):
+    permission_classes = [HasAegisPermission]
+    authentication_classes = [ApiSessionAuthentication]
+    required_aegis_permission = Permission.Code.CONTENT_SEARCH
+    http_method_names = ["post", "head", "options"]
+
+    def post(self, request):
+        if not isinstance(request.data, dict):
+            raise ValidationError({"detail": ["Expected a JSON object."]})
+        unknown_fields = set(request.data) - {"question"}
+        if unknown_fields:
+            raise ValidationError(
+                {key: ["Unexpected field."] for key in sorted(unknown_fields)}
+            )
+        if "question" not in request.data:
+            raise ValidationError({"question": ["This field is required."]})
+        question = request.data["question"]
+        if not isinstance(question, str):
+            raise ValidationError({"question": ["A string value is required."]})
+        try:
+            payload = retrieve_authorized_sources(question, user=request.user)
+        except ValueError as exc:
+            raise ValidationError({"question": [str(exc)]}) from exc
+        return Response({"data": payload})

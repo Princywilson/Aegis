@@ -9,7 +9,8 @@ from knowledge.models import (
     ProgramAccessGrant,
 )
 
-from .models import ActivityEvent, AuditRecord, SecurityEvent
+from .evidence import visible_evidence_details
+from .models import ActivityEvent, AuditRecord, RiskInvestigation, SecurityEvent
 
 
 def user_display_name(user):
@@ -190,3 +191,48 @@ class SecurityEventSerializer(serializers.ModelSerializer):
                 pk=event.resource_id,
             ).values_list("name", flat=True).first()
         return None
+
+
+class RiskInvestigationSerializer(serializers.ModelSerializer):
+    created_by_id = serializers.UUIDField(read_only=True)
+    reviewed_by_id = serializers.UUIDField(read_only=True, allow_null=True)
+    created_by_name = serializers.SerializerMethodField()
+    reviewed_by_name = serializers.SerializerMethodField()
+    evidence = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RiskInvestigation
+        fields = [
+            "id",
+            "organization_id",
+            "created_by_id",
+            "created_by_name",
+            "reviewed_by_id",
+            "reviewed_by_name",
+            "title",
+            "summary",
+            "notes",
+            "status",
+            "severity",
+            "evidence",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+        ]
+        read_only_fields = fields
+
+    def get_created_by_name(self, investigation):
+        return user_display_name(investigation.created_by)
+
+    def get_reviewed_by_name(self, investigation):
+        return user_display_name(investigation.reviewed_by)
+
+    def get_evidence(self, investigation):
+        request = self.context.get("request")
+        if request is None:
+            return []
+        return visible_evidence_details(
+            investigation.evidence,
+            user=request.user,
+            organization_id=investigation.organization_id,
+        )

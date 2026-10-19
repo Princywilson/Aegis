@@ -11,8 +11,9 @@ from django.utils import timezone
 from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 from rest_framework.exceptions import APIException
 
-from accountability.models import ActivityEvent
-from identity.models import User
+from accountability.models import ActivityEvent, AuditRecord
+from identity.models import Permission, User
+from identity.rbac import has_permission
 
 from .models import (
     Content,
@@ -101,6 +102,79 @@ def start_content_access(*, content_id, program_id, organization_id, user):
         content_version=content.current_version,
         program=program,
         content_access=access,
+        metadata={"access_context": ContentAccess.Context.CONSUMER},
+    )
+    return access
+
+
+@transaction.atomic
+def start_content_preview(*, content_id, version_id, organization_id, user):
+    if (
+        user.status != User.Status.ACTIVE
+        or not has_permission(
+            user,
+            Permission.Code.CONTENT_VIEW,
+            organization_id=organization_id,
+        )
+        or not has_permission(
+            user,
+            Permission.Code.CONTENT_PREVIEW,
+            organization_id=organization_id,
+        )
+        or not has_permission(
+            user,
+            Permission.Code.VERSION_VIEW,
+            organization_id=organization_id,
+        )
+    ):
+        raise ContentAccess.DoesNotExist
+
+    try:
+        content = Content.objects.select_for_update().get(
+            pk=content_id,
+            organization_id=organization_id,
+            status__in=[Content.Status.DRAFT, Content.Status.PUBLISHED],
+        )
+        version = ContentVersion.objects.select_for_update().get(
+            pk=version_id,
+            organization_id=organization_id,
+            content=content,
+            status__in=[
+                ContentVersion.Status.DRAFT,
+                ContentVersion.Status.PUBLISHED,
+            ],
+        )
+    except (Content.DoesNotExist, ContentVersion.DoesNotExist) as exc:
+        raise ContentAccess.DoesNotExist from exc
+
+    access = ContentAccess.objects.create(
+        organization_id=organization_id,
+        user=user,
+        content=content,
+        content_version=version,
+        access_context=ContentAccess.Context.PREVIEW,
+        access_result=ContentAccess.Result.GRANTED,
+    )
+    ActivityEvent.objects.create(
+        organization_id=organization_id,
+        user=user,
+        event_type=ActivityEvent.EventType.VIEWER_OPENED,
+        content=content,
+        content_version=version,
+        content_access=access,
+        metadata={"access_context": ContentAccess.Context.PREVIEW},
+    )
+    AuditRecord.objects.create(
+        organization_id=organization_id,
+        actor_user=user,
+        action=AuditRecord.Action.CONTENT_PREVIEW_STARTED,
+        resource_type="content",
+        resource_id=content.id,
+        metadata={
+            "access_context": ContentAccess.Context.PREVIEW,
+            "preview_session_id": str(access.id),
+            "content_version_id": str(version.id),
+        },
     )
     return access
 
@@ -154,6 +228,60 @@ def get_content_access_for_delivery(
         program_id=access.program_id,
         content_id=content_id,
     ).exists():
+        raise ContentAccess.DoesNotExist
+    return access
+
+
+def get_content_preview_for_delivery(
+    *,
+    access_id,
+    content_id,
+    organization_id,
+    user,
+):
+    try:
+        access = ContentAccess.objects.select_related(
+            "organization",
+            "user",
+            "content",
+            "content_version",
+        ).get(
+            pk=access_id,
+            organization_id=organization_id,
+            user=user,
+            content_id=content_id,
+            access_result=ContentAccess.Result.GRANTED,
+            access_context=ContentAccess.Context.PREVIEW,
+            content__organization_id=organization_id,
+            content__status__in=[Content.Status.DRAFT, Content.Status.PUBLISHED],
+            content_version__organization_id=organization_id,
+            content_version__content_id=content_id,
+            content_version__status__in=[
+                ContentVersion.Status.DRAFT,
+                ContentVersion.Status.PUBLISHED,
+            ],
+        )
+    except ContentAccess.DoesNotExist as exc:
+        raise ContentAccess.DoesNotExist from exc
+
+    if (
+        user.status != User.Status.ACTIVE
+        or not has_permission(
+            user,
+            Permission.Code.CONTENT_VIEW,
+            organization_id=organization_id,
+        )
+        or not has_permission(
+            user,
+            Permission.Code.CONTENT_PREVIEW,
+            organization_id=organization_id,
+        )
+        or not has_permission(
+            user,
+            Permission.Code.VERSION_VIEW,
+            organization_id=organization_id,
+        )
+    ):
         raise ContentAccess.DoesNotExist
     return access
 
@@ -239,8 +367,13 @@ def build_watermark_text(access):
     accessed_at = access.accessed_at.astimezone(datetime_timezone.utc)
     timestamp = accessed_at.strftime("%Y-%m-%d %H:%M:%S UTC")
     content_reference = str(access.content_id).split("-")[0]
+    preview_label = (
+        "PREVIEW | "
+        if access.access_context == ContentAccess.Context.PREVIEW
+        else ""
+    )
     return (
-        f"{user_name} | {access.organization.name} | {timestamp} | "
+        f"{preview_label}{user_name} | {access.organization.name} | {timestamp} | "
         f"Content {content_reference} v{access.content_version.version_number}"
     )
 

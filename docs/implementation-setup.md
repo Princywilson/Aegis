@@ -2,6 +2,8 @@
 
 This guide is based on the current repository state in this workspace only. It is intended to help a developer set up and manually verify AEGIS from a fresh Windows terminal without modifying application code, database contents, or environment files beyond the repo-supported local configuration.
 
+For an end-user description of the available application pages and workflows, see the [AEGIS User Manual](user-manual.md).
+
 Important notes before starting:
 
 - This repository does not currently include a committed `backend/.env` file. The existing template is `backend/.env.example`.
@@ -281,7 +283,7 @@ To assign a role to the first administrator user, create an organization and use
 Use a guarded shell example such as:
 
 ```powershell
-.\venv\Scripts\python.exe .\backend\manage.py shell -c "from identity.models import Organization, User; org, _ = Organization.objects.get_or_create(name='My Organization', slug='myOrg'); user, _ = User.objects.get_or_create(email='princywilson2002@gmail.com', organization=org, defaults={'first_name': 'Princy', 'last_name': 'W'}); user.set_password('Princy@22'); user.is_staff = True; user.save(); print(org.slug, user.email)"
+.\venv\Scripts\python.exe .\backend\manage.py shell -c "from identity.models import Organization, User; org, _ = Organization.objects.get_or_create(name='NIST Global', slug='nist'); user, _ = User.objects.get_or_create(email='princywilson2002@gmail.com', organization=org, defaults={'first_name': 'Princy', 'last_name': 'W'}); user.set_password('Princy@22'); user.is_staff = True; user.save(); print(org.slug, user.email)"
 ```
 
 Then assign a role:
@@ -548,6 +550,7 @@ The current frontend exposes the following routes after login. The app uses an a
 | `/programs` | Programs | Create, list, deactivate/activate programs and content assignments | `PROGRAM_VIEW` and related write permissions | Implemented |
 | `/access` | Access and grants | Manage user access grants, delivery workflows, protected content access | `ACCESS_GRANT`, `ACCESS_REVOKE`, `PROFILE_VIEW_OWN`, and/or delivery rights | Implemented |
 | `/viewer` | Secure viewer | Protected content delivery viewer | `SECURE_DELIVERY` permission and valid content access | Implemented |
+| `/preview/{content_id}/{version_id}` | Privileged content preview | Render a selected non-archived draft or published version | `CONTENT_PREVIEW`, `CONTENT_VIEW`, and `VERSION_VIEW` | Implemented; migrations applied; manual acceptance pending |
 | `/activity` | Activity | View organization activity data | Read rights for activity | Implemented |
 | `/audit` | Audit records | View audit records | Organization audit permissions | Implemented |
 | `/security-events` | Security events | Review security events | Security-event view permission | Implemented |
@@ -602,6 +605,7 @@ The following scenarios are supported by the shipped code and by the repo status
   4. Open browser DevTools and confirm the session cookie is created.
   5. Sign out using the sidebar button.
   6. Confirm the app returns to `/login` and `/auth/me/` no longer returns a valid session.
+  7. If an authorized disposable test account can safely trigger the configured login rate limit, confirm the UI gives a wait-and-retry message without exposing a precise countdown or whether the account exists. Do not trigger repeated failures against a shared or production account.
 - Expected result: session created, secure page loads, logout clears session.
 - Relevant backend results: `POST /api/v1/auth/login/`, `GET /api/v1/auth/me/`, `POST /api/v1/auth/logout/` with CSRF.
 - Status: Implemented and verified in repo docs.
@@ -741,6 +745,67 @@ The following scenarios are supported by the shipped code and by the repo status
   3. Repeat the same action after fixing the input.
 - Expected result: the app recovers and is ready for the next valid interaction.
 - Status: Implemented as a product requirement; validate with the browser UI.
+
+### G13. Privileged content preview
+
+- Objective: Verify the separately authorized operator-preview workflow without
+  changing consumer grants or assignment rules.
+- Prerequisites: an active Administrator or Content Manager with
+  `CONTENT_PREVIEW`, `CONTENT_VIEW`, and `VERSION_VIEW`; a non-archived Content
+  item with a DRAFT or PUBLISHED PDF/image version; a synthetic or approved
+  test file. The preview migrations and `seed_rbac` have already been applied
+  to the configured local `aegis` development database. Do not reapply them.
+- Starting screen: `/content`.
+- Actions:
+  1. Select the Content item and confirm **Preview** is present for eligible
+     versions.
+  2. Open a DRAFT version without publishing it or assigning it to a Program.
+  3. Confirm the page renders with the visible `PREVIEW` watermark and the
+     selected user, organization, time, Content, and version context.
+  4. In browser Network tools, verify the start request is
+     `POST /api/v1/content/{content_id}/preview/` and page requests use
+     `GET /api/v1/content/{content_id}/preview/{access_id}/delivery?page=1`.
+     Confirm page responses are watermarked PNG with `private, no-store`;
+     no source-file URL or bytes are returned.
+  5. Confirm a `CONTENT_PREVIEW_STARTED` audit record and preview-context
+     viewer activity exist. Confirm no Program grant or Content assignment was
+     created or changed, and preview activity is absent from consumer reports,
+     analytics, and access-burst signals.
+  6. Archive the Content or version, revoke `CONTENT_PREVIEW`, and try another
+     page request. Confirm access is rejected. Also verify another user and a
+     user in another organization cannot reuse the preview ID.
+  7. Sign in as a Content Consumer with no preview permission and confirm no
+     Preview action is shown and the API denies a preview start.
+- Expected result: only the permitted operator can inspect eligible
+  organization-owned content; current authorization is checked on each page;
+  consumer grant/assignment behavior and consumer metrics remain unchanged.
+- Status: Automated backend and frontend tests pass. Run authenticated browser
+  acceptance using the configured development database and synthetic or
+  approved test content. Record the outcome in `docs/implementation-status.md`.
+  The migrations are installed on local `aegis`; do not repeat the migration or
+  RBAC-seeding steps for this manual test.
+
+### G14. Sidebar scrolling
+
+- Objective: Confirm the desktop sidebar remains usable when its contents are
+  taller than the viewport while the account controls remain fixed at the
+  bottom and the navigation scrollbar stays visually hidden.
+- Starting screen: Any authenticated page on a desktop-sized browser window.
+- Actions:
+  1. Reduce the browser viewport height until all navigation items and the
+     account/sign-out area no longer fit.
+  2. Confirm the profile name and **Sign out** control remain visible at the
+     bottom while navigation items overflow above them.
+  3. Scroll over the navigation list and confirm only its items move while the
+     scrollbar itself is not visible.
+  4. Use keyboard navigation to reach the final navigation item and the
+     **Sign out** control.
+  5. Widen/reduce the viewport to mobile size and confirm the horizontal
+     navigation behavior remains intact.
+- Expected result: Desktop navigation remains vertically scrollable and
+  keyboard reachable without a visible scrollbar; profile and sign-out remain
+  fixed at the bottom. Mobile navigation is unchanged.
+- Status: Implemented; verify in browser as part of manual UI acceptance.
 
 ## H. Browser developer tools and API verification
 
@@ -1008,3 +1073,220 @@ The repository clearly supports a local Windows workflow that includes:
 - A set of API endpoints, screens, and tests covering identity, accountability, and knowledge work
 
 The major remaining gap is that the repository does not appear to provide a fully documented, shipped, safe bootstrap flow for creating the first organization and administrator user out of the box. The code and docs do show the supported pattern, but it requires a controlled Django shell or a manual shell-based bootstrap procedure.
+
+## M. Scope expansion: manual verification
+
+This section extends the local setup guide for risk review, investigations, and knowledge retrieval. Complete sections A–K first. Use only a development database and synthetic content; do not use production or customer data.
+
+### M.1 Read the current feature boundary first
+
+The current implementation exposes these additions through the backend API and React application:
+
+- A React **Risk signals** page and advisory signal/summary APIs. These are not contextual access policies and do not grant, deny, or revoke access.
+- A React **Risk investigations** workflow and organization-scoped list/detail/create/update endpoints. The workflow supports validated filters, pagination, evidence references, edits, and lifecycle transitions.
+- A React **Knowledge search** page and permission-aware retrieval endpoint over Content titles and descriptions. It is retrieval-only, not semantic document search and not a generative RAG assistant.
+
+The feature APIs use existing session authentication and permissions. The risk and investigation endpoints require organization-wide security-event visibility; the retrieval endpoint requires content-search permission and also checks content-view permission. Evidence sources are independently permission-checked and hidden if they are no longer visible to the caller. Risk signals and investigations are available in the React navigation to users with the corresponding permission. The procedures below combine UI checks with direct API checks for negative authorization and validation cases.
+
+### M.2 Verification limitations to account for
+
+The following are implementation limitations that affect expected manual results. Record them as gaps; do not treat a missing result as a successful acceptance test:
+
+1. The repeated-denial signal reads the normal `ACCESS_DENIED` `SecurityEvent` path and requires a content resource and non-null user. Do not insert fabricated evidence into a shared or persistent database to make this signal appear.
+2. Risk, investigation, and metadata-search workflows have focused automated backend/frontend coverage, but authenticated browser acceptance has not yet been recorded.
+3. Investigation evidence references are limited to persisted Security Events and Audit Records, at most 25 per case. Security-event evidence must be a Content `ACCESS_DENIED` event; audit evidence is limited to supported Content-related resource types. Source visibility is checked again when a case is read.
+4. Retrieval searches only title and description metadata. It does not extract or search the private PDF/PPTX document body, create chunks, or call an AI model. Its response text is fixed retrieval status, not an LLM answer.
+5. The existing risk thresholds and severity assignments are not validated risk scores or formally approved business policy. No labeled anomaly dataset or real-world precision/recall evaluation exists.
+6. Retrieval is live case-insensitive substring matching with a 200-character query limit and at most five results. There is no persistent index or semantic relevance ranking, and the endpoint is not a completed generative RAG assistant.
+7. The risk API applies inclusive timezone-aware `from`/`to` filters and bounded pagination. The list defaults to page 1 with 20 items and allows at most 100 items per page. The summary endpoint accepts the same time and signal filters but no pagination parameters.
+
+These findings mean the three capabilities are not yet equivalent to contextual access-policy enforcement, complete evidence-integrated case management, or generative RAG. The retrieval-only endpoint may be manually exercised, but describe it accurately as permission-aware metadata retrieval.
+
+### M.3 Prepare test data
+
+Use the normal application UI with an authorized test administrator:
+
+1. Confirm the administrator can see the intended workspace and has `SECURITY_EVENT_VIEW_ORGANIZATION`.
+2. Create or identify a separate active Content Consumer in the same organization.
+3. Create at least three synthetic content records with distinct titles/descriptions. Upload and publish a supported version for each.
+4. Create an active program, assign all three published content items to it, and grant the Content Consumer access to that program.
+5. If testing tenant isolation, use a second test organization and a consumer in that organization. Never reuse a real user account.
+
+Do not change the application authorization model or manually modify protected records as part of these checks. Access tests should use the application endpoints and existing admin screens.
+
+### M.4 Create an authenticated PowerShell API session
+
+Run in PowerShell. Substitute the test account's organization slug and credentials locally. Do not save this script with credentials or include secrets in test evidence.
+
+```powershell
+$BaseUrl = "http://127.0.0.1:8000/api/v1"
+$Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+
+$CsrfResponse = Invoke-RestMethod `
+  -Uri "$BaseUrl/auth/csrf/" `
+  -Method Get `
+  -WebSession $Session
+$CsrfToken = $CsrfResponse.data.csrf_token
+
+$OrganizationSlug = Read-Host "Test organization slug"
+$Email = Read-Host "Test user email"
+$SecurePassword = Read-Host "Test user password" -AsSecureString
+$PasswordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecurePassword)
+try {
+  $PlainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($PasswordPointer)
+} finally {
+  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($PasswordPointer)
+}
+$LoginBody = @{
+  organization_slug = $OrganizationSlug
+  email = $Email
+  password = $PlainPassword
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri "$BaseUrl/auth/login/" `
+  -Method Post `
+  -WebSession $Session `
+  -Headers @{ "X-CSRFToken" = $CsrfToken } `
+  -ContentType "application/json" `
+  -Body $LoginBody
+Remove-Variable PlainPassword, LoginBody, SecurePassword -ErrorAction SilentlyContinue
+
+Invoke-RestMethod -Uri "$BaseUrl/auth/me/" -Method Get -WebSession $Session
+```
+
+The `/auth/me/` response should identify the expected organization, roles, and effective permissions. Repeat this setup using a separate session when testing as the Content Consumer or second-organization user.
+
+For subsequent unsafe requests in the same session, pass `-WebSession $Session` and `-Headers @{ "X-CSRFToken" = $CsrfToken }`. Use GET requests without a CSRF header. If the session expires, repeat the CSRF and login steps.
+
+### M.5 Capability A — advisory risk signal checks
+
+**A1. Access-burst rule (supported by normal access flow)**
+
+1. Sign in as the Content Consumer test user.
+2. Open at least four access sessions over three or more distinct, published, assigned content items during the configured 24-hour window. For each item, use the normal viewer flow or call the existing access-start endpoint:
+
+   ```powershell
+   $ContentId = "<published-assigned-content-uuid>"
+   $ProgramId = "<active-program-uuid>"
+   $Body = @{ program_id = $ProgramId } | ConvertTo-Json
+   Invoke-RestMethod `
+     -Uri "$BaseUrl/content/$ContentId/access/" `
+     -Method Post `
+     -WebSession $Session `
+     -Headers @{ "X-CSRFToken" = $CsrfToken } `
+     -ContentType "application/json" `
+     -Body $Body
+   ```
+
+   Repeat for a total of at least four successful access starts and at least three distinct content IDs. Each attempt creates a granted access record; do not reuse the same content ID for every attempt if testing the distinct-content threshold.
+3. Sign in as the authorized administrator, open **Risk signals** from the sidebar, and check the signal type, severity, event count, content count (for bursts), observed window, and explanation. Set optional **From** and **To** filters and use the pagination controls.
+4. Verify that a timezone-aware bounded API request returns the same filtered result and pagination metadata:
+
+   ```powershell
+   $From = [DateTimeOffset]::UtcNow.AddHours(-24).ToString("o")
+   $To = [DateTimeOffset]::UtcNow.ToString("o")
+   Invoke-RestMethod -Uri "$BaseUrl/risk-signals/?from=$([uri]::EscapeDataString($From))&to=$([uri]::EscapeDataString($To))&page=1&page_size=20" -Method Get -WebSession $Session
+   Invoke-RestMethod -Uri "$BaseUrl/risk-signals/summary/?from=$([uri]::EscapeDataString($From))&to=$([uri]::EscapeDataString($To))" -Method Get -WebSession $Session
+   ```
+
+5. Check for an `ACCESS_BURST` signal for the consumer, with the expected organization scope, event count, content count, reason, and timestamps.
+6. Confirm the consumer's access still succeeds or is denied solely according to existing grants, assignments, publication, and permission checks. A signal must not change that outcome.
+
+**Expected:** The burst appears only when the rule thresholds and time window are met. The signal is informational; no access state changes.
+
+**A2. Repeated-denial rule**
+
+1. As the consumer, attempt a delivery operation for content to which the user is not authorized.
+2. Confirm the request is denied and the existing security-event screen/API records the access-denied security event.
+3. Query the Risk signals page or `/risk-signals/` as the authorized administrator.
+4. Confirm that at least three denied Content events for that user in one rolling 24-hour window produce `REPEATED_DENIALS` with MEDIUM severity.
+
+Do not create denied `ContentAccess` or `SecurityEvent` evidence by hand in a shared or production database. Use the normal denial path or deterministic automated test fixtures.
+
+**A3. Authorization and tenant isolation**
+
+1. Sign in as a user without `SECURITY_EVENT_VIEW_ORGANIZATION`; request `/risk-signals/` and `/risk-investigations/`. Expect authorization failure.
+2. Sign in as an authorized administrator for Organization A. Verify the returned signal data contains no user/resource identifiers from Organization B.
+3. Try filtering using any unsupported query parameter. Expect a validation error rather than silently accepted filters.
+4. Try a reversed or timezone-naive date range, page zero, a non-integer page size, and a page size above 100. Expect a validation response for each.
+
+### M.6 Capability B — risk-investigation workflow and API checks
+
+Use an administrator with `SECURITY_EVENT_VIEW_ORGANIZATION`. To test Audit Record evidence visibility, the account also needs `AUDIT_VIEW_ORGANIZATION`.
+
+1. In the React navigation, open **Risk investigations**. Verify the list, status/severity filters, pagination, empty state, and loading/error feedback. Confirm **Apply filters** is aligned with the fields and uses the primary blue button style.
+2. Select **+ New investigation** and verify the creation form opens in a dialog. Select an existing Security Event reference from the evidence selector, enter a synthetic title/summary/note, choose a severity, and create the case. The selector contains only currently visible Content `ACCESS_DENIED` events; do not fabricate IDs or modify source records.
+3. Open the new case. Verify its details and evidence metadata. Edit title, summary, notes, severity, or evidence, then save. Confirm success/error feedback and that the saved data is reloaded from the API.
+4. Exercise allowed transitions (`OPEN` → `IN_REVIEW` or `DISMISSED`; `IN_REVIEW` → `RESOLVED` or `DISMISSED`) and verify terminal statuses expose no further transition controls and all detail fields are read-only.
+5. For each terminal status, attempt an API PATCH with a changed title, notes, severity, evidence, or repeated status. Expect HTTP 400, no record mutation, and no new successful-mutation audit record. Confirm an authorized GET still returns the closed record.
+6. Obtain the case UUID from the investigation list API, then inspect its audit records using an account authorized to view audit records:
+
+   ```powershell
+   $Cases = Invoke-RestMethod `
+     -Uri "$BaseUrl/risk-investigations/?page=1&page_size=100" `
+     -Method Get `
+     -WebSession $Session
+   $InvestigationId = $Cases.results[0].id
+   Invoke-RestMethod `
+     -Uri "$BaseUrl/audits/?resource_type=risk_investigation&resource_id=$InvestigationId" `
+     -Method Get `
+     -WebSession $Session
+   ```
+
+   Verify creation, every meaningful edit (including a notes-only edit), evidence changes, and transitions are represented by audit actions. Confirm audit metadata identifies changed field names and evidence counts but does not contain raw notes, summary, or title text.
+7. For negative API checks, attempt `OPEN` → `RESOLVED`, an invalid status/severity, an unknown field, a duplicate/malformed/nonexistent evidence reference, or a cross-organization evidence ID. Expect a validation failure and no partial mutation. Use only IDs from test data.
+8. Confirm a user without `SECURITY_EVENT_VIEW_ORGANIZATION` is denied list, detail, create, and update. Confirm a different organization's authorized operator receives not-found for the case. If a source permission is revoked, verify that source is omitted from the case detail without exposing its ID or metadata.
+9. Re-read the original evidence record before and after edits; it must remain unchanged.
+
+These steps exercise both the React workflow and backend authorization boundary. Automated tests cover more transition combinations and evidence cases; manual checks must still be recorded separately.
+
+### M.7 Capability C — permission-aware metadata retrieval checks
+
+Use the React **Knowledge search** page with a consumer account. Confirm that its explanation says it searches Content metadata only, enter a title/description phrase, and verify the authorized citations or empty state appears in the results table within the search panel. The API endpoint is `POST /assistant/query/`; use a session for the consumer whose permissions/grants are under test for the negative checks below.
+
+```powershell
+$Body = @{ question = "Distinctive exact phrase in a published content title" } | ConvertTo-Json
+Invoke-RestMethod `
+  -Uri "$BaseUrl/assistant/query/" `
+  -Method Post `
+  -WebSession $Session `
+  -Headers @{ "X-CSRFToken" = $CsrfToken } `
+  -ContentType "application/json" `
+  -Body $Body
+```
+
+Run these checks:
+
+1. **Authorized match:** Use a distinctive title or description phrase from a published, assigned item in an active program with an active grant. Expect a citation with content ID, title, current version number, authorized Program names where the user has `PROGRAM_VIEW`, and metadata summary. Do not expect a generated answer or passage citation.
+2. **No match:** Search for a phrase absent from authorized titles/descriptions. Expect an empty citation list and `insufficient_authorized_sources: true`.
+3. **Cross-organization isolation:** Sign in as a consumer in another organization and search for Organization A's distinctive phrase. Expect no citation for Organization A.
+4. **Revoked grant:** Revoke the test consumer's grant and repeat the query. The source must no longer be cited.
+5. **Inactive assignment/program, unpublished content, or stale/mismatched current version:** Change the test fixture through authorized application workflows, then repeat retrieval. The ineligible item must not be cited. Restore test data only through normal supported management actions.
+6. **Permission failure:** Use a user without `CONTENT_SEARCH`; expect authorization failure. If search permission exists but content-view permission is removed in a controlled test role, retrieval must also fail.
+7. **Invalid/blank question:** Send an empty or whitespace-only question; expect HTTP 400 and no sources.
+8. **Citation metadata scope:** Assign the same Content to another Program that is not granted to the consumer. Repeat the query and verify the unauthorized Program name is absent. Also verify citations do not include raw storage keys/URLs, file content, or inaccessible resource metadata.
+
+The UI supports metadata search and citations, but does not provide semantic retrieval, document-body indexing, citation passage offsets, model grounding, or generative RAG.
+
+### M.8 Scope-expansion evidence log
+
+Use the evidence table in L.2 and add a row for each test ID. Record the account role and organization using synthetic labels only. Never capture credentials, session cookies, CSRF tokens, or private content.
+
+| Test ID | Capability | Expected result | Current status |
+|---|---|---|---|
+| M-A1 | Access burst | Advisory signal at the documented threshold; access decision unchanged | Manually verify |
+| M-A2 | Repeated denials | Signal from denial evidence | Automated tests pass; manual verify with normal events |
+| M-A3 | Signal authorization/tenant isolation | Unauthorized request denied; no cross-org data | Manually verify |
+| M-B1 | Investigation transitions and edits | Allowed transitions succeed; invalid transitions rejected; meaningful edits audited | Automated tests pass; manual verify |
+| M-B2 | Evidence references and read visibility | Valid source references accepted; malformed/cross-tenant/unauthorized references rejected; revoked source hidden | Automated tests pass; manual verify |
+| M-B3 | Investigation authorization/tenant isolation | Denied or not found across unauthorized scope | Automated tests pass; manual verify |
+| M-C1 | Authorized metadata retrieval | Current authorized citation only | Automated tests pass; manual verify |
+| M-C2 | Revocation and stale/ineligible source exclusion | Source omitted after access/lifecycle change | Automated tests pass; manual verify |
+| M-C3 | Invalid query / insufficient sources | Safe validation or empty-source response | Automated tests pass; manual verify |
+| M-UI1 | Investigation/search layout and dialog | Filter controls align; investigation creation is modal; authorized metadata matches display in the search panel | Automated tests pass; manual verify |
+| M-UI2 | Navigation and rate-limit guidance | Sidebar remains usable at small viewport heights; sign-out is recognizable; 429 advises waiting without inventing a retry time | Automated tests pass; manual verify |
+
+### M.9 Do not declare all scope expansion capabilities complete based on manual checks
+
+Manual testing can exercise the implemented paths, but the current code does not enforce contextual access policies and does not implement semantic document retrieval or a generative RAG assistant. Record manual outcomes in `docs/implementation-status.md`; do not mark a failed or unavailable check as passed.

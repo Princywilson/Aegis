@@ -50,6 +50,14 @@ Scalable
 Auditable
 ```
 
+## 2.1 Risk Signals and Investigations
+
+The risk-signal service derives results at request time from existing records; there is no separate `RiskSignal` table or duplicate logging system. `ACCESS_BURST` reads granted `ContentAccess` rows. `REPEATED_DENIALS` reads tenant-scoped `SecurityEvent` rows written by the normal denial path (`event_type="ACCESS_DENIED"`, `resource_type="content"`, non-null user). Both rules evaluate rolling 24-hour windows and remain advisory. The current thresholds and severities reflect existing implementation behavior; they have not been validated as product policy or through a labeled-data evaluation. Signal reads introduce no schema changes.
+
+Investigations are persisted as `risk_investigations` records. Their `evidence` JSON field stores a bounded list of `{type, id}` references, not copies of or foreign-key relationships to immutable evidence rows. The API validates source existence, organization, source type, and source-view permission on writes, and re-resolves references under the caller's current permission when returning investigation details. A source that is deleted or no longer visible is omitted. Investigation creation and meaningful updates are atomic with their `AuditRecord`; the audit stores changed field names and evidence counts rather than raw notes, summaries, or titles. Once an investigation reaches `RESOLVED` or `DISMISSED`, the API rejects all updates; the read endpoint remains available under its existing authorization. No schema change or additional event log is needed for this immutability rule. No persistent retrieval chunk/index model is introduced in this version.
+
+Knowledge retrieval is computed live from `Content`, `ContentVersion`, `ContentAssignment`, `Program`, and `ProgramAccessGrant`; no persistent chunks, embeddings, or index are stored. Queries require the existing search and view permissions. For a Content Consumer, the current organization, published Content/current version, active assigned Program, and matching active unexpired user grant are enforced on every query. Program-name citations are derived from the same authorized Program queryset and only returned to users with `PROGRAM_VIEW`. Retrieval changes no access, grant, assignment, publication, or version records.
+
 The database must therefore preserve the distinction between:
 
 ```
@@ -792,9 +800,8 @@ Content Access
 | `content_version_id` | UUID | Yes |
 | `program_id` | UUID | No |
 | `accessed_at` | TIMESTAMP | Yes |
-| `session_id` | UUID / reference | No |
 | `access_result` | VARCHAR | Yes |
-| `client_context` | JSONB | No |
+| `access_context` | VARCHAR | Yes |
 
 `access_result` may distinguish events such as:
 
@@ -802,6 +809,13 @@ Content Access
 GRANTED
 DENIED
 ```
+
+`access_context` is `CONSUMER` (the default for existing and new consumer
+records) or `PREVIEW`. Consumer records reference a Program; privileged preview
+records have no Program and bind to the selected ContentVersion. Preview uses
+the existing ContentAccess and ActivityEvent records, rather than a parallel
+view-log table. Reports and advisory consumer access-burst signals explicitly
+filter to `CONSUMER`.
 
 For successful protected delivery, the version actually delivered must be
 recorded. In M8, the access ID is a user-bound record reference, not a bearer
@@ -815,10 +829,29 @@ Content
     ↓
 Version 3
     ↓
-Content Consumer accessed Version 3
+User accessed Version 3 in consumer or preview context
 ```
 
 must remain historically determinable even after Version 4 becomes current.
+
+### Privileged preview schema and migrations
+
+- `identity.0004_alter_permission_code` synchronizes Django migration state
+  with the new `CONTENT_PREVIEW` permission choice. Existing role seeding grants
+  it to Administrator and Content Manager. Run the existing `seed_rbac`
+  command after migration to populate the permission catalogue and bring
+  existing standard-role assignments up to date.
+- `knowledge.0007_contentaccess_access_context_and_more` adds the constrained
+  `access_context` field, defaulting existing records to `CONSUMER`.
+- `knowledge.0008_contentaccess_content_preview_without_program` enforces that
+  a preview-context ContentAccess record cannot reference a Program.
+- `accountability.0013_remove_auditrecord_audit_action_valid_and_more` updates
+  audit action migration state and its database check constraint to include
+  `CONTENT_PREVIEW_STARTED`.
+
+These migrations add no new infrastructure or separate session model. Apply
+them through the approved deployment/recovery procedure before running the
+feature against a persistent database.
 
 ---
 
