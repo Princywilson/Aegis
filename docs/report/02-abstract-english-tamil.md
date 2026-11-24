@@ -1,0 +1,19 @@
+# ABSTRACT
+
+AEGIS is a full-stack enterprise knowledge protection and delivery platform developed to help organizations create, organize, publish, assign, protect, and audit digital knowledge. The application addresses a practical weakness in conventional file sharing: authorized viewing should not automatically provide unrestricted access to the original source file. AEGIS instead applies organization-aware authentication, role-based access control, program assignments, active access grants, immutable published versions, server-side rendering, and contextual watermarking.
+
+The implementation uses React 19 and Vite for the browser interface, Django 5.2 and Django REST Framework for the backend API, and PostgreSQL 16 for transactional data. Protected file bytes are retained in a private filesystem storage root. Django sessions provide authentication, CSRF validation protects unsafe requests, and backend permission and tenant checks remain authoritative even if navigation is hidden in the user interface.
+
+The platform supports organization and custom-user administration, role and permission management, content metadata and version lifecycle, program-level grouping, content assignment, grant and revocation workflows, secure PDF and image viewing, activity tracking, append-only audit history, security events, analytics, access reports, advisory risk signals, exposure-risk investigations, and permission-aware knowledge search over content titles and descriptions. The secure viewer renders approved PDFs and images into private PNG pages and applies user, content, and access context as a watermark. Source files are not exposed through public storage URLs, and each delivered page is reauthorized.
+
+The project follows a layered architecture and records operational evidence for testable, reproducible implementation. Backend verification covered 174 tests against a disposable PostgreSQL database, while frontend verification covered 23 Vitest tests and a successful Vite production build. The project also identifies its limitations: no browser screenshots from an authenticated synthetic session were available in the repository, PowerPoint and MP4 presentation are not currently rendered by the secure viewer, and the knowledge assistant performs metadata retrieval rather than document semantic search or generative AI. Within these documented limits, AEGIS demonstrates a practical, secure, and maintainable approach to governed knowledge delivery.
+
+---
+
+# சுருக்கம்
+
+AEGIS என்பது நிறுவனங்களால் டிஜிட்டல் அறிவை உருவாக்குவதற்கும், ஒழுங்கமைப்பதற்கும், வெளியிடுவதற்கும், ஒதுக்குவதற்கும், பாதுகாப்பதற்கும் மற்றும் கண்காணிப்பதற்கும் உருவாக்கப்பட்ட முழுமையான இணைய பயன்பாடாகும். பொதுவான கோப்பு பகிர்வில் அனுமதிக்கப்பட்ட பயனர் மூல கோப்பின் கட்டுப்பாடற்ற அணுகலைப் பெறுவார். AEGIS அமைப்பில் நிறுவன அளவிலான உள்நுழைவு, பங்கு சார்ந்த அணுகல் கட்டுப்பாடு, திட்டப் பணிகள், செயலில் உள்ள அணுகல் அனுமதிகள், பதிப்பின் நிலைகள், சேவையகத்தில் உள்ள பக்க உருவாக்கம் மற்றும் நீர்முத்திரை பயன்படுத்தப்படுகின்றன.
+
+React 19 மற்றும் Vite முன்புறத்திலும், Django மற்றும் Django REST Framework பின்னணியிலும், PostgreSQL தரவுத்தளத்திலும் பயன்பாடு உருவாக்கப்பட்டுள்ளது. பாதுகாக்கப்பட்ட கோப்புகள் தனியார் சேமிப்பகத்தில் வைத்திருக்கப்படுகின்றன. அமர்வு மற்றும் CSRF பாதுகாப்பு உள்ள உள்நுழைவு முறை பயன்படுத்தப்படுகிறது. நிறுவனம், பயனர் பங்கு மற்றும் அனுமதி ஆகியவற்றைக் கணக்கில் கொண்டு ஒவ்வொரு API செயல்பாடும் சேவையகத்தில் உறுதிப்படுத்தப்படுகிறது.
+
+இந்த திட்டம் உள்ளடக்க மேலாண்மை, பதிப்புகள், அணுகல் அனுமதிகள், பாதுகாப்பான பார்வை, செயல்பாட்டு பதிவு, ஆடிட்ட் பதிவு, பாதுகாப்பு நிகழ்வுகள், கணக்கீடு அறிக்கைகள், அபாய சிக்னல்கள், விசாரணைகள் மற்றும் அனுமதியுள்ள உள்ளடக்கத் தேடல் ஆகிய அம்சங்களை வழங்குகிறது. மூல கோப்பு நேரடியாக வெளியிடப்படாமல் PDF மற்றும் படப் பக்கங்கள் செயல்பாட்டுப் பின்னணியில் நீர்முத்திரையுடன் பயனருக்கு வழங்கப்படுகின்றன.
